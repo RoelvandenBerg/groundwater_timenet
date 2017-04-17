@@ -4,24 +4,24 @@ levels.
 
 ## TODOs
 ##### collect data:
-  -[X] DINO groundwater levels
-  -[ ] KNMI rain
-  -[ ] rain radar data? 
-  -[ ] KNMI evaporation
-  -[ ] soil data
-  -[X] geohydrology data (GEOTOP data)
+- [X] DINO groundwater levels
+- [ ] KNMI rain
+- [ ] rain radar data? 
+- [ ] KNMI evaporation
+- [ ] soil data
+- [X] geohydrology data (GEOTOP data)
 ##### parse data:
-  -[X] DINO groundwater levels
-  -[ ] KNMI rain
-  -[ ] rain radar data? 
-  -[ ] KNMI evaporation
-  -[ ] soil data
-  -[X] geohydrology data (GEOTOP data)
+- [X] DINO groundwater levels
+- [ ] KNMI rain
+- [ ] rain radar data? 
+- [ ] KNMI evaporation
+- [ ] soil data
+- [X] geohydrology data (GEOTOP data)
 ##### build a neural network with Keras / Tensorflow:
-  -[ ] Wavenet atrous CNN architecture
-  -[ ] LTSM architecture
-  -[ ] combine / try out different combinations
-  -[ ] reiterate...
+- [ ] Wavenet atrous CNN architecture
+- [ ] LTSM architecture
+- [ ] combine / try out different combinations
+- [ ] reiterate...
 
 
 ## Data Sources
