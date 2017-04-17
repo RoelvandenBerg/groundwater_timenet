@@ -87,3 +87,14 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+
+# data
+geotop.nc
+codering_geotop.pdf
+
+# Local development
+.idea/
+Vagrantfile
+.vagrant
+bin/
