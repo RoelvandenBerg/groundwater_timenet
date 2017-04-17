@@ -28,21 +28,7 @@ levels.
 ### Projection
 Dutch spatial data uses _Amersfoort / RD New_ projection. Since the datasources 
 we use use this projection we do not provide an interface that transforms this 
-data. If we would want to use this. This is the way to go:
-
-     def get_transform(source_EPSG=4326, target_EPSG=28992):
-         """
-         Returns transform to transform coordinates from source to target.
-         Defaults to transform from WSG84 to Amersfoort / RD new.
-         """
-         source = osr.SpatialReference()
-         source.ImportFromEPSG(source_EPSG)
-     
-         target = osr.SpatialReference()
-         target.ImportFromEPSG(target_EPSG)
-     
-         return osr.CoordinateTransformation(source, target)
-
+data. If we would want to use this. 
 
 ### DINO
 #### Groundwater stations
