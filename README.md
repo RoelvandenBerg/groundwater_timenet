@@ -5,15 +5,15 @@ levels.
 ## TODOs
 ##### collect data:
 - [X] DINO groundwater levels
-- [ ] KNMI rain
-- [ ] rain radar data? 
-- [ ] KNMI evaporation
+- [ ] KNMI rain measurement station data
+- [X] KNMI rain radar data
+- [X] KNMI evaporation
 - [ ] soil data
 - [X] geohydrology data (GEOTOP data)
 ##### parse data:
 - [X] DINO groundwater levels
 - [ ] KNMI rain
-- [ ] rain radar data? 
+- [ ] KNMI rain measurement station data
 - [ ] KNMI evaporation
 - [ ] soil data
 - [X] geohydrology data (GEOTOP data)
@@ -28,7 +28,7 @@ levels.
 ### Projection
 Dutch spatial data uses _Amersfoort / RD New_ projection. Since the datasources 
 we use use this projection we do not provide an interface that transforms this 
-data. If we would want to use this. 
+data. 
 
 ### DINO
 #### Groundwater stations
@@ -37,41 +37,41 @@ _'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'_. This WFS has one
 layer: _'Grondwateronderzoek'_. Features in this layer have the following 
 fields:
     
-    ['gml_id',
-     'identifier',
-     'dino_nr',
-     'x_rd_crd',
-     'y_rd_crd',
-     'piezometer_nr',
-     'start_date',
-     'end_date',
-     'sample_cnt',
-     'Grondwaterstand|piezometer_nr',
-     'top_depth_mv',
-     'bottom_depth_mv',
-     'top_height_nap',
-     'bottom_height_nap',
-     'Grondwaterstand|start_date',
-     'Grondwaterstand|end_date',
-     'head_cnt',
-     'cluster_id',
-     'cluster_lst',
-     'Grondwatersamenstelling|top_depth_mv',
-     'Grondwatersamenstelling|bottom_depth_mv',
-     'Grondwatersamenstelling|top_height_nap',
-     'Grondwatersamenstelling|bottom_height_nap']
+- gml_id
+- identifier
+- dino_nr
+- x_rd_crd
+- y_rd_crd
+- piezometer_nr
+- start_date
+- end_date
+- sample_cnt
+- Grondwaterstand|piezometer_nr
+- top_depth_mv
+- bottom_depth_mv
+- top_height_nap
+- bottom_height_nap
+- Grondwaterstand|start_date
+- Grondwaterstand|end_date
+- head_cnt
+- cluster_id
+- cluster_lst
+- Grondwatersamenstelling|top_depth_mv
+- Grondwatersamenstelling|bottom_depth_mv
+- Grondwatersamenstelling|top_height_nap
+- Grondwatersamenstelling|bottom_height_nap
 
 Since we are interested in ground water levels, we use the fields:
 
-    ['dino_nr',
-     'x_rd_crd',
-     'y_rd_crd',
-     'top_depth_mv',
-     'bottom_depth_mv',
-     'top_height_nap',
-     'bottom_height_nap',
-     'Grondwaterstand|start_date',
-     'Grondwaterstand|end_date']
+- dino_nr
+- x_rd_crd
+- y_rd_crd
+- top_depth_mv
+- bottom_depth_mv
+- top_height_nap
+- bottom_height_nap
+- Grondwaterstand|start_date
+- Grondwaterstand|end_date
 
 An example request for this WFS is: 
 http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0?SERVICE=WMS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAME=Grondwateronderzoek&SRS=EPSG%3A28992&BBOX=155000.0001213038,352899.52037477936,210050.24017302057,407949.7604122343
