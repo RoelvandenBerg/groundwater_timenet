@@ -12,13 +12,14 @@ long_description = '\n\n'.join([
     ])
 
 install_requires = [
-    'numpy',
-    'pandas',
-    'tensorflow',
     'keras',
-    'suds-py3',
-    'osgeo',
     'netcdf4',
+    'numpy',
+    'osgeo',
+    'pandas',
+    'requests',
+    'suds-py3',
+    'tensorflow',
     ],
 
 setup(name='ggmn-site',

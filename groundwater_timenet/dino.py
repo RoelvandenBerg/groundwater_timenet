@@ -7,7 +7,9 @@ from osgeo import ogr
 from osgeo import osr
 from osgeo import gdal
 
-logger = logging.getLogger(__name__)
+from groundwater_timenet import utils
+
+logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'
 WFS_LAYER_NAME = 'Grondwateronderzoek'
@@ -38,7 +40,8 @@ def wfs_layer_and_srs(url=WFS_URL, layer_name=WFS_LAYER_NAME):
         pass
     srs = layer.GetSpatialRef()
     logger.info(
-        'Using Dino WFS serice "%s", with layer "%s" and spatial reference: %s',
+        'Using Dino WFS serice "%s", with layer "%s" and spatial reference: '
+        '%s',
         url,
         layer_name,
         srs.GetAttrValue('projcs')
@@ -48,9 +51,9 @@ def wfs_layer_and_srs(url=WFS_URL, layer_name=WFS_LAYER_NAME):
 
 def transform(geom, source_epsg=4326, target_epsg=28992):
     source = osr.SpatialReference()
-    source.ImportFromEPSG(2927)
+    source.ImportFromEPSG(source_epsg)
     target = osr.SpatialReference()
-    target.ImportFromEPSG(4326)
+    target.ImportFromEPSG(target_epsg)
     transformation = osr.CoordinateTransformation(source, target)
     geom.Transform(transformation)
 
@@ -76,7 +79,9 @@ def get_features(layer, minx, miny, maxx, maxy):
          'Grondwaterstand|start_date',
          'Grondwaterstand|end_date')
     """
+    logger.debug("Bounding Box: %d %d %d %d", minx, miny, maxx, maxy)
     layer.SetSpatialFilterRect(minx, miny, maxx, maxy)
+    logger.debug("Got %d features.", layer.GetFeatureCount())
     for i in layer.GetFeatureCount():
         feature = layer.GetFeature(i)
         yield (
@@ -110,7 +115,7 @@ def load_station_data(nitg_nr):
     )
 
 
-def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
+def sliding_geom_window(source_json, gridHeight=1000, gridWidth=1000):
     """
     Generates bounding boxes that fit a shape.
     Leans heavily on https://pcjericks.github.io/py-gdalogr-cookbook/
@@ -124,7 +129,7 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     driver = ogr.GetDriverByName('GeoJSON')
     data_source = driver.Open(source_json, 0)
     if data_source is None:
-        raise ValueError('%s is not a valid shapefile', source_json)
+        raise ValueError('%s is not a valid json', source_json)
     layer = data_source.GetLayer()
     feature = next(layer)
     geom = feature.geometry()
@@ -150,7 +155,7 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
 
         # reset envelope for rows
         ringYtop = ringYtopOrigin
-        ringYbottom =ringYbottomOrigin
+        ringYbottom = ringYbottomOrigin
         countrows = 0
 
         while countrows < rows:
@@ -165,7 +170,7 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
             poly = ogr.Geometry(ogr.wkbPolygon)
             poly.AddGeometry(ring)
 
-            # TODO: test this, within might be within the envelope, which is
+            # TODO: Fix this, within seems to be within the envelope, which is
             # useless for our case since the grid is based on the envelope.
             if poly.Within(geom):
                 yield (
@@ -189,17 +194,14 @@ def load_dino_groundwater(url=WFS_URL, layer_name=WFS_LAYER_NAME):
     sliding_window = sliding_geom_window('NederlandRegion.json')
     for minx, miny, maxx, maxy in sliding_window:
         features = get_features(layer, minx, miny, maxx, maxy)
+        logger.debug("")
         for (well, x, y, top_depth, bottom_depth, top_height, bottom_height,
                 start, end) in features:
+            logger.debug("%s %s %s %s %s %s %s %s %s %s", well, x, y, top_depth, bottom_depth, top_height, bottom_height,
+                start, end)
             data = load_station_data(well)
             for i, (well_nr, tube_nr, well_data) in enumerate(data):
                 yield (
                     well, tube_nr, x, y, top_depth, bottom_depth, top_height,
-                      bottom_height, start, end, well_data)
-
-
-
-
-
-
-
+                    bottom_height, start, end, well_data
+                )

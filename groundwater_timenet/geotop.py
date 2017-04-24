@@ -1,9 +1,9 @@
-import logging
-
-import numpy as np
 from netCDF4 import Dataset
 
-logger = logging.getLogger(__name__)
+from groundwater_timenet import utils
+
+logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
+
 
 RELEVANT_VARIABLES = [
     'strat',
@@ -26,7 +26,7 @@ def geotop_handler(filename='geotop.nc'):
     rootgrp = Dataset(filename, "r")
 
     def geotop_data(x, y, ground_level):
-        z =  int(round((ground_level + 50) * 2))
+        z = int(round((ground_level + 50) * 2))
         rd_x = int(round(x - 13600) / 100)
         rd_y = int(round(x - 358000) / 100)
         return [
@@ -35,5 +35,3 @@ def geotop_handler(filename='geotop.nc'):
         ]
 
     return geotop_data
-
-
