@@ -6,7 +6,10 @@ import zipfile
 
 import requests
 
-from groundwater_timenet import utils
+try:
+    from groundwater_timenet import utils
+except ImportError:
+    import utils
 
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
@@ -61,14 +64,22 @@ def grab_daily_ftp(target_dir, source_base, filename_parser, start, end=None,
     ftp.quit()
 
 
-def grab_rain_grids(target_dir="var/data/rain/"):
+def grab_rain_grids(target_dir="var/data/rain/", start=(2008, 3, 11, 8)):
     """Downloads all knmi evapotranspiration data to target_dir."""
+    day = datetime.timedelta(1)
+    change_date = datetime.datetime(2010, 5, 31)
+    def parser(date):
+
+        if date >= change_date:
+            return "RAD_NL25_RAC_24H_" + (date + day
+                                          ).strftime("%Y%m%d%H%M") + ".h5"
+        else:
+            return "RAD_NL25_RAC_24H_" + date.strftime("%Y%m%d%H%M") + ".h5"
     grab_daily_ftp(
         target_dir=target_dir,
         source_base='/download/radar_corr_accum_24h/1.0/noversion/',
-        filename_parser=lambda date: "RAD_NL25_RAC_24H_" +
-                                     date.strftime("%Y%m%d%H%M") + ".h5",
-        start=(2008, 3, 11, 8)
+        filename_parser=parser,
+        start=start
     )
 
 
@@ -109,3 +120,9 @@ def load_knmi_measurement_data(target_dir='var/data/knmi_measurementstations'):
         zf = zipfile.ZipFile(io.BytesIO(response.content))
         zf.extractall(path=target_dir)
         logger.debug("Collected measurement data for station %s", code)
+
+
+if __name__ == '__main__':
+    grab_evap_grids()
+    grab_rain_grids()
+    load_knmi_measurement_data()

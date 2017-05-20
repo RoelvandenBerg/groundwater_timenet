@@ -1,52 +1,21 @@
-import logging
-import sys
 from math import ceil
 
 from suds.client import Client as SoapClient
 from osgeo import ogr
 from osgeo import osr
-from osgeo import gdal
+from owslib.wfs import WebFeatureService
+from tempfile import NamedTemporaryFile
 
 from groundwater_timenet import utils
 
+
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
+
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'
-WFS_LAYER_NAME = 'Grondwateronderzoek'
+WFS_LAYER_NAME = 'gdn:Grondwateronderzoek'
 
 SOAP_CLIENT = SoapClient("http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
-
-
-# Speeds up querying WFS capabilities for services with alot of layers
-gdal.SetConfigOption('OGR_WFS_LOAD_MULTIPLE_LAYER_DEFN', 'NO')
-
-# Set config for paging. Works on WFS 2.0 services and WFS 1.0 and 1.1 with
-# some other services.
-gdal.SetConfigOption('OGR_WFS_PAGING_ALLOWED', 'YES')
-gdal.SetConfigOption('OGR_WFS_PAGE_SIZE', '10000')
-
-
-def wfs_layer_and_srs(url=WFS_URL, layer_name=WFS_LAYER_NAME):
-    driver = ogr.GetDriverByName('WFS')
-    wfs = driver.Open('WFS:' + url)
-    if not wfs:
-        sys.exit('ERROR: can not open WFS datasource')
-    else:
-        pass
-    layer = wfs.GetLayerByName(layer_name)
-    if not layer:
-        sys.exit('ERROR: can not open WFS layer')
-    else:
-        pass
-    srs = layer.GetSpatialRef()
-    logger.info(
-        'Using Dino WFS serice "%s", with layer "%s" and spatial reference: '
-        '%s',
-        url,
-        layer_name,
-        srs.GetAttrValue('projcs')
-    )
-    return layer, srs
 
 
 def transform(geom, source_epsg=4326, target_epsg=28992):
@@ -58,7 +27,7 @@ def transform(geom, source_epsg=4326, target_epsg=28992):
     geom.Transform(transformation)
 
 
-def get_features(layer, minx, miny, maxx, maxy):
+def get_features(wfs, layer_name, minx, miny, maxx, maxy):
     """
     Generator that iterates over layer features for a certain bounding box.
 
@@ -80,21 +49,35 @@ def get_features(layer, minx, miny, maxx, maxy):
          'Grondwaterstand|end_date')
     """
     logger.debug("Bounding Box: %d %d %d %d", minx, miny, maxx, maxy)
-    layer.SetSpatialFilterRect(minx, miny, maxx, maxy)
-    logger.debug("Got %d features.", layer.GetFeatureCount())
-    for i in layer.GetFeatureCount():
-        feature = layer.GetFeature(i)
-        yield (
-            feature.GetField('dino_nr'),
-            feature.GetField('x_rd_crd'),
-            feature.GetField('y_rd_crd'),
-            feature.GetField('Grondwaterstand|start_date'),
-            feature.GetField('Grondwaterstand|end_date'),
-            feature.GetField('top_depth_mv'),
-            feature.GetField('bottom_depth_mv'),
-            feature.GetField('top_height_nap'),
-            feature.GetField('bottom_depth_mv'),
-        )
+    resp = wfs.getfeature(typename=layer_name,
+                          bbox=(minx, miny, maxx, maxy))
+    with NamedTemporaryFile('w') as temporary_file:
+        with open(temporary_file.name, 'w') as gmlfile:
+            gmlfile.write(resp.read())
+        driver = ogr.GetDriverByName('GML')
+        gml = driver.Open(temporary_file.name)
+        layer = gml.GetLayer()
+        if layer is not None:
+            logger.debug("Got %d features.", layer.GetFeatureCount())
+            for feature in layer:
+                yield (
+                    try_get_field(feature, 'dino_nr'),
+                    try_get_field(feature, 'x_rd_crd'),
+                    try_get_field(feature, 'y_rd_crd'),
+                    try_get_field(feature, 'Grondwaterstand|start_date'),
+                    try_get_field(feature, 'Grondwaterstand|end_date'),
+                    try_get_field(feature, 'top_depth_mv'),
+                    try_get_field(feature, 'bottom_depth_mv'),
+                    try_get_field(feature, 'top_height_nap'),
+                    try_get_field(feature, 'bottom_depth_mv'),
+                )
+
+
+def try_get_field(feature, fieldname, default=None):
+    try:
+        return feature.GetField(fieldname)
+    except ValueError:
+        return default
 
 
 def load_station_data(nitg_nr):
@@ -115,7 +98,7 @@ def load_station_data(nitg_nr):
     )
 
 
-def sliding_geom_window(source_json, gridHeight=1000, gridWidth=1000):
+def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     """
     Generates bounding boxes that fit a shape.
     Leans heavily on https://pcjericks.github.io/py-gdalogr-cookbook/
@@ -149,18 +132,12 @@ def sliding_geom_window(source_json, gridHeight=1000, gridWidth=1000):
     ringYbottomOrigin = ymax-gridHeight
 
     # create grid cells
-    countcols = 0
-    while countcols < cols:
-        countcols += 1
-
+    for _ in range(cols):
         # reset envelope for rows
         ringYtop = ringYtopOrigin
         ringYbottom = ringYbottomOrigin
-        countrows = 0
 
-        while countrows < rows:
-            countrows += 1
-
+        for _ in range(rows):
             ring = ogr.Geometry(ogr.wkbLinearRing)
             ring.AddPoint(ringXleftOrigin, ringYtop)
             ring.AddPoint(ringXrightOrigin, ringYtop)
@@ -172,36 +149,42 @@ def sliding_geom_window(source_json, gridHeight=1000, gridWidth=1000):
 
             # TODO: Fix this, within seems to be within the envelope, which is
             # useless for our case since the grid is based on the envelope.
-            if poly.Within(geom):
+            if poly.Within(geom) or poly.Intersects(geom):
                 yield (
-                    ringXleftOrigin,
-                    ringYtopOrigin,
-                    ringXrightOrigin,
-                    ringYbottomOrigin
+                    ringXleftOrigin + gridWidth,
+                    ringYtop + gridHeight,
+                    ringXrightOrigin + gridWidth,
+                    ringYbottom + gridHeight
                 )
 
             # new envelope for next poly
-            ringYtop = ringYtop - gridHeight
-            ringYbottom = ringYbottom - gridHeight
+            ringYtop -= gridHeight
+            ringYbottom -= gridHeight
 
         # new envelope for next poly
-        ringXleftOrigin = ringXleftOrigin + gridWidth
-        ringXrightOrigin = ringXrightOrigin + gridWidth
+        ringXleftOrigin += gridWidth
+        ringXrightOrigin += gridWidth
 
 
 def load_dino_groundwater(url=WFS_URL, layer_name=WFS_LAYER_NAME):
-    layer, srs = wfs_layer_and_srs(url, layer_name)
+    wfs = WebFeatureService(url=url, version='2.0.0')
     sliding_window = sliding_geom_window('NederlandRegion.json')
     for minx, miny, maxx, maxy in sliding_window:
-        features = get_features(layer, minx, miny, maxx, maxy)
-        logger.debug("")
+        features = get_features(wfs, layer_name, minx, miny, maxx, maxy)
         for (well, x, y, top_depth, bottom_depth, top_height, bottom_height,
                 start, end) in features:
-            logger.debug("%s %s %s %s %s %s %s %s %s %s", well, x, y, top_depth, bottom_depth, top_height, bottom_height,
-                start, end)
-            data = load_station_data(well)
-            for i, (well_nr, tube_nr, well_data) in enumerate(data):
-                yield (
-                    well, tube_nr, x, y, top_depth, bottom_depth, top_height,
-                    bottom_height, start, end, well_data
-                )
+            logger.debug(
+                "Got Feature: %s %s %s %s %s %s %s %s %s", well, x, y,
+                top_depth, bottom_depth, top_height, bottom_height, start, end
+            )
+            try:
+                data = load_station_data(well)
+                for i, (well_nr, tube_nr, well_data) in enumerate(data):
+                    yield (
+                        well, tube_nr, x, y, top_depth, bottom_depth,
+                        top_height, bottom_height, start, end, well_data
+                    )
+            except AttributeError:
+                logger.exception("Well %s doesn't contain values", well)
+
+
