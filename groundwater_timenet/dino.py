@@ -1,3 +1,4 @@
+import logging
 from math import ceil
 import os
 from tempfile import NamedTemporaryFile
@@ -15,7 +16,7 @@ except ImportError:
     import utils
 
 
-logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
+logger = utils.setup_logging(__name__, utils.HARVEST_LOG, logging.INFO)
 
 
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'
@@ -54,7 +55,7 @@ def get_features(wfs, layer_name, minx, miny, maxx, maxy):
          'Grondwaterstand|start_date',
          'Grondwaterstand|end_date')
     """
-    logger.debug("Bounding Box: %d %d %d %d", minx, miny, maxx, maxy)
+    logger.info("Bounding Box: %d %d %d %d", minx, miny, maxx, maxy)
     resp = wfs.getfeature(typename=layer_name,
                           bbox=(minx, miny, maxx, maxy))
     with NamedTemporaryFile('w') as temporary_file:
@@ -193,7 +194,7 @@ def load_dino_grid_cell(features):
                         bottom_depth_mv_down, top_height_up, top_height_down,
                         bottom_height_up, bottom_height_down], well_data)
         except AttributeError:
-            logger.debug("Well %s doesn't contain values", well)
+            logger.info("Well %s doesn't contain values", well)
 
 
 def load_dino_groundwater(skip=0, url=WFS_URL, layer_name=WFS_LAYER_NAME):
@@ -229,11 +230,11 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
                 for d, v, f in well_data if f is None and v is not None
             ]
             if len(data_) == 0:
-                logger.debug("Well %s %s doesn't contain data",
+                logger.info("Well %s %s doesn't contain data",
                              metadata[0], metadata[1])
                 continue
             data = np.array(data_)
-            logger.debug(
+            logger.info(
                 "Got Feature: %s, size: %s", str(metadata), data.shape[0]
             )
             try:
@@ -281,7 +282,7 @@ def list_metadata():
         for filepath in hdf5_files:
             h5_file = h5py.File(filepath, "r")
             length = len(h5_file.get("metadata", []))
-            if length:
+            if length == 0:
                 message = "File " + filepath + "doesn't contain metadata"
             else:
                 message = "File " + filepath + "contains " + str(length) + \

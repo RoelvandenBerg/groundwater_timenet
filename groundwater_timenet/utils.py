@@ -18,9 +18,9 @@ def mkdirs(path):
         pass
 
 
-def setup_logging(name, filename):
+def setup_logging(name, filename, loglevel=logging.DEBUG):
     mkdirs(filename)
-    logging.basicConfig(filename=filename, level=logging.DEBUG)
+    logging.basicConfig(filename=filename, level=loglevel)
     logger = logging.getLogger(name)
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
