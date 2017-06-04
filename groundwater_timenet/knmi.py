@@ -11,6 +11,7 @@ try:
 except ImportError:
     import utils
 
+
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
 
@@ -68,8 +69,8 @@ def grab_rain_grids(target_dir="var/data/rain/", start=(2008, 3, 11, 8)):
     """Downloads all knmi evapotranspiration data to target_dir."""
     day = datetime.timedelta(1)
     change_date = datetime.datetime(2010, 5, 31)
-    def parser(date):
 
+    def parser(date):
         if date >= change_date:
             return "RAD_NL25_RAC_24H_" + (date + day
                                           ).strftime("%Y%m%d%H%M") + ".h5"

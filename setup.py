@@ -12,6 +12,7 @@ long_description = '\n\n'.join([
     ])
 
 install_requires = [
+    'h5py',
     'keras',
     'netcdf4',
     'numpy',

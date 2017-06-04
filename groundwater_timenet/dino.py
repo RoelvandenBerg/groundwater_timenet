@@ -1,12 +1,18 @@
 from math import ceil
+import os
+from tempfile import NamedTemporaryFile
 
 from suds.client import Client as SoapClient
 from osgeo import ogr
 from osgeo import osr
 from owslib.wfs import WebFeatureService
-from tempfile import NamedTemporaryFile
+import numpy as np
+import h5py
 
-from groundwater_timenet import utils
+try:
+    from groundwater_timenet import utils
+except ImportError:
+    import utils
 
 
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
@@ -14,9 +20,9 @@ logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'
 WFS_LAYER_NAME = 'gdn:Grondwateronderzoek'
-
 SOAP_CLIENT = SoapClient("http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
-
+FILENAME_BASE = "dino"
+NAN_VALUE = -9999999
 
 def transform(geom, source_epsg=4326, target_epsg=28992):
     source = osr.SpatialReference()
@@ -61,23 +67,34 @@ def get_features(wfs, layer_name, minx, miny, maxx, maxy):
             logger.debug("Got %d features.", layer.GetFeatureCount())
             for feature in layer:
                 yield (
-                    try_get_field(feature, 'dino_nr'),
-                    try_get_field(feature, 'x_rd_crd'),
-                    try_get_field(feature, 'y_rd_crd'),
-                    try_get_field(feature, 'Grondwaterstand|start_date'),
-                    try_get_field(feature, 'Grondwaterstand|end_date'),
-                    try_get_field(feature, 'top_depth_mv'),
-                    try_get_field(feature, 'bottom_depth_mv'),
-                    try_get_field(feature, 'top_height_nap'),
-                    try_get_field(feature, 'bottom_depth_mv'),
+                    try_get_field(feature, 'dino_nr', 1),
+                    try_get_field(feature, 'x_rd_crd', 1),
+                    try_get_field(feature, 'y_rd_crd', 1),
+                    try_get_field(feature, 'Grondwaterstand|start_date', 2)[0],
+                    try_get_field(feature, 'Grondwaterstand|end_date', 2)[0],
+                    try_get_field(feature, 'top_depth_mv', 2),
+                    try_get_field(feature, 'bottom_depth_mv', 2),
+                    try_get_field(feature, 'top_height_nap', 2),
+                    try_get_field(feature, 'bottom_height_mv', 2),
                 )
 
 
-def try_get_field(feature, fieldname, default=None):
+def try_get_field(feature, fieldname, n, default=""):
     try:
-        return feature.GetField(fieldname)
+        value = feature.GetField(fieldname)
+        if value is None:
+            return [default] * n
+        elif n > 1:
+            if len(value) < n:
+                return [value] + [default] * (n - len(value))
+            elif len(value) > n:
+                if isinstance(value, list):
+                    return value[:n]
+                else:
+                    return [value] + [default] * (n - 1)
+        return value
     except ValueError:
-        return default
+        return [default] * n
 
 
 def load_station_data(nitg_nr):
@@ -118,7 +135,7 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     geom = feature.geometry()
     # reproject it to Amersfoort / RD New
     transform(geom)
-    (xmin, xmax, ymin, ymax) = geom.GetEnvelope()
+    (xmin, xmax, ymin, ymax) = (round(x) for x in geom.GetEnvelope())
 
     # get rows
     rows = ceil((ymax-ymin)/gridHeight)
@@ -166,25 +183,125 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
         ringXrightOrigin += gridWidth
 
 
-def load_dino_groundwater(url=WFS_URL, layer_name=WFS_LAYER_NAME):
+def load_dino_grid_cell(features):
+    for (well, x, y, start, end,
+         (top_depth_mv_up, top_depth_mv_down),
+         (bottom_depth_mv_up, bottom_depth_mv_down),
+         (top_height_up, top_height_down),
+         (bottom_height_up, bottom_height_down)) in features:
+        logger.debug(
+            "Got Feature: %s %s %s %s %s %s %s %s %s %s %s %s %s", well, x, y,
+            start, end, top_depth_mv_up, top_depth_mv_down, bottom_depth_mv_up,
+            bottom_depth_mv_down, top_height_up, top_height_down,
+            bottom_height_up, bottom_height_down)
+        try:
+            data = load_station_data(well)
+            for well_nr, tube_nr, well_data in data:
+                yield ([well, tube_nr, x, y, start, end, top_depth_mv_up,
+                        top_depth_mv_down, bottom_depth_mv_up,
+                        bottom_depth_mv_down, top_height_up, top_height_down,
+                        bottom_height_up, bottom_height_down], well_data)
+        except AttributeError:
+            logger.debug("Well %s doesn't contain values", well)
+
+
+def load_dino_groundwater(skip=0, url=WFS_URL, layer_name=WFS_LAYER_NAME):
     wfs = WebFeatureService(url=url, version='2.0.0')
     sliding_window = sliding_geom_window('NederlandRegion.json')
+    [next(sliding_window) for _ in range(skip)]
     for minx, miny, maxx, maxy in sliding_window:
         features = get_features(wfs, layer_name, minx, miny, maxx, maxy)
-        for (well, x, y, top_depth, bottom_depth, top_height, bottom_height,
-                start, end) in features:
-            logger.debug(
-                "Got Feature: %s %s %s %s %s %s %s %s %s", well, x, y,
-                top_depth, bottom_depth, top_height, bottom_height, start, end
-            )
+        yield load_dino_grid_cell(features), minx, miny
+
+
+def parse_filepath(minx, miny, filename_base="dino"):
+    filepath = os.path.join(
+        utils.DATA, filename_base, str(miny), str(minx) + ".hdf5"
+    )
+    utils.mkdirs(filepath)
+    return filepath
+
+
+def download_hdf5(skip=0, filename_base=FILENAME_BASE):
+    dino_data = load_dino_groundwater(skip)
+    skip_filepath = os.path.join(utils.DATA, filename_base, "skip_count.txt")
+    total_count = 0
+    for grid_cell, minx, miny, in dino_data:
+        filepath = parse_filepath(minx, miny, filename_base)
+        h5_file = h5py.File(filepath, "w", libver='latest')
+        meta_data = []
+        changed = False
+        for metadata, well_data in grid_cell:
+            # cast to float and handle faulty data.
+            data_ = [
+                [np.datetime64(d, 's').astype('f4'), v]
+                for d, v, f in well_data if f is None and v is not None
+            ]
+            if len(data_) == 0:
+                logger.debug("Well %s %s doesn't contain data",
+                             metadata[0], metadata[1])
+                continue
+            data = np.array(data_)
             try:
-                data = load_station_data(well)
-                for i, (well_nr, tube_nr, well_data) in enumerate(data):
-                    yield (
-                        well, tube_nr, x, y, top_depth, bottom_depth,
-                        top_height, bottom_height, start, end, well_data
-                    )
-            except AttributeError:
-                logger.exception("Well %s doesn't contain values", well)
+                dataset = h5_file.create_dataset(
+                    metadata[0] + str(metadata[1]), data.shape, dtype='f4')
+            except RuntimeError:
+                dataset = h5_file.get(metadata[0] + str(metadata[1]))
+                logger.debug("%s %s ALREADY EXISTS! ",
+                             metadata[0], str(metadata[1]))
+            dataset[...] = data
+            meta_data.append([str(x) for x in metadata])
+            skip += 1
+            changed = True
+        if changed:
+            meta_data_array = np.array([[u.encode('utf8') for u in record]
+                                        for record in meta_data])
+            try:
+                meta_dataset = h5_file.create_dataset(
+                    "metadata", meta_data_array.shape,
+                    dtype=str(meta_data_array.dtype)
+                )
+            except RuntimeError:
+                meta_dataset = h5_file.get("metadata")
+            meta_dataset[...] = meta_data_array
+            count = len(meta_data)
+            total_count += count
+            logger.info(
+                'Downloaded %d wells to %s. Total count: %d, next time, skip %d '
+                'valid grid cells.', count, filepath, total_count, skip
+            )
+        if not changed:
+            os.remove(filepath)
+        with open(skip_filepath, 'w') as skip_file:
+            skip_file.write(str(skip))
 
 
+def list_metadata():
+    base = os.path.join(utils.DATA, FILENAME_BASE)
+    logger.info("All y coordinates: %s", str(os.listdir(base)))
+    for root, dirs, files in os.walk(base):
+        hdf5_files = [
+            os.path.join(root, hdf5_file) for hdf5_file in files
+            if hdf5_file[-4:] == "hdf5"
+        ]
+        for filepath in hdf5_files:
+            h5_file = h5py.File(filepath, "r")
+            length = len(h5_file.get("metadata", []))
+            if length:
+                message = "File " + filepath + "doesn't contain metadata"
+            else:
+                message = "File " + filepath + "contains " + str(length) + \
+                          "records"
+            logger.info(message)
+
+
+if __name__ == "__main__":
+    list_metadata()
+    skip_filepath = os.path.join(utils.DATA, FILENAME_BASE, "skip_count.txt")
+    utils.mkdirs(skip_filepath)
+    try:
+        with open(skip_filepath, 'r') as skip_file:
+            skip = int(skip_file.read())
+    except OSError:
+        skip = 0
+    download_hdf5(skip, FILENAME_BASE)

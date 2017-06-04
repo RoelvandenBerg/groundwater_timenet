@@ -6,6 +6,7 @@ import logging
 import os
 
 HARVEST_LOG = 'var/log/harvest.log'
+DATA = 'var/data'
 
 
 def mkdirs(path):
@@ -18,6 +19,7 @@ def mkdirs(path):
 
 
 def setup_logging(name, filename):
+    mkdirs(filename)
     logging.basicConfig(filename=filename, level=logging.DEBUG)
     logger = logging.getLogger(name)
     ch = logging.StreamHandler()
