@@ -67,11 +67,11 @@ def get_features(wfs, layer_name, minx, miny, maxx, maxy):
             logger.debug("Got %d features.", layer.GetFeatureCount())
             for feature in layer:
                 yield (
-                    try_get_field(feature, 'dino_nr', 1),
-                    try_get_field(feature, 'x_rd_crd', 1),
-                    try_get_field(feature, 'y_rd_crd', 1),
-                    try_get_field(feature, 'Grondwaterstand|start_date', 2)[0],
-                    try_get_field(feature, 'Grondwaterstand|end_date', 2)[0],
+                    try_get_field(feature, 'dino_nr', 1)[0],
+                    try_get_field(feature, 'x_rd_crd', 1)[0],
+                    try_get_field(feature, 'y_rd_crd', 1)[0],
+                    try_get_field(feature, 'Grondwaterstand|start_date', 1)[0],
+                    try_get_field(feature, 'Grondwaterstand|end_date', 1)[0],
                     try_get_field(feature, 'top_depth_mv', 2),
                     try_get_field(feature, 'bottom_depth_mv', 2),
                     try_get_field(feature, 'top_height_nap', 2),
@@ -82,19 +82,15 @@ def get_features(wfs, layer_name, minx, miny, maxx, maxy):
 def try_get_field(feature, fieldname, n, default=""):
     try:
         value = feature.GetField(fieldname)
-        if not value:
-            return [default] * n
-        elif n > 1:
-            if len(value) < n:
-                return [value] + [default] * (n - len(value))
-            elif len(value) > n:
-                if isinstance(value, list):
-                    return value[:n]
-                else:
-                    return [value] + [default] * (n - 1)
-        return value
     except ValueError:
         return [default] * n
+    if isinstance(value, list):
+        if len(value) >= n:
+            return value[:n]
+        return value + [default] * (n - len(value))
+    elif value is None:
+        return [default] * n
+    return [value] + [default] * (n - 1)
 
 
 def load_station_data(nitg_nr):
@@ -107,7 +103,7 @@ def load_station_data(nitg_nr):
     return (
         (
             meetreeks.WELL_NITG_NR, meetreeks.WELL_TUBE_NR,
-            (
+            list(
                 (level.DATE, level.LEVEL, level.REMARK)
                 for level in meetreeks.LEVELS
             )
@@ -189,11 +185,6 @@ def load_dino_grid_cell(features):
          (bottom_depth_mv_up, bottom_depth_mv_down),
          (top_height_up, top_height_down),
          (bottom_height_up, bottom_height_down)) in features:
-        logger.debug(
-            "Got Feature: %s %s %s %s %s %s %s %s %s %s %s %s %s", well, x, y,
-            start, end, top_depth_mv_up, top_depth_mv_down, bottom_depth_mv_up,
-            bottom_depth_mv_down, top_height_up, top_height_down,
-            bottom_height_up, bottom_height_down)
         try:
             data = load_station_data(well)
             for well_nr, tube_nr, well_data in data:
@@ -242,6 +233,9 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
                              metadata[0], metadata[1])
                 continue
             data = np.array(data_)
+            logger.debug(
+                "Got Feature: %s, size: %s", str(metadata), data.shape[0]
+            )
             try:
                 dataset = h5_file.create_dataset(
                     metadata[0] + str(metadata[1]), data.shape, dtype='f4')
