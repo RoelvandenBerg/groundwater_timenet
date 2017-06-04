@@ -82,7 +82,7 @@ def get_features(wfs, layer_name, minx, miny, maxx, maxy):
 def try_get_field(feature, fieldname, n, default=""):
     try:
         value = feature.GetField(fieldname)
-        if value is None:
+        if not value:
             return [default] * n
         elif n > 1:
             if len(value) < n:
@@ -251,7 +251,6 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
                              metadata[0], str(metadata[1]))
             dataset[...] = data
             meta_data.append([str(x) for x in metadata])
-            skip += 1
             changed = True
         if changed:
             meta_data_array = np.array([[u.encode('utf8') for u in record]
@@ -272,6 +271,7 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
             )
         if not changed:
             os.remove(filepath)
+        skip += 1
         with open(skip_filepath, 'w') as skip_file:
             skip_file.write(str(skip))
 
