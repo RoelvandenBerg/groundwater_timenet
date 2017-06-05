@@ -1,14 +1,16 @@
-import logging
 from math import ceil
-import os
 from tempfile import NamedTemporaryFile
+from time import sleep
+from urllib.error import HTTPError
+import logging
+import os
 
-from suds.client import Client as SoapClient
 from osgeo import ogr
 from osgeo import osr
 from owslib.wfs import WebFeatureService
-import numpy as np
+from suds.client import Client as SoapClient
 import h5py
+import numpy as np
 
 try:
     from groundwater_timenet import utils
@@ -24,6 +26,7 @@ WFS_LAYER_NAME = 'gdn:Grondwateronderzoek'
 SOAP_CLIENT = SoapClient("http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
 FILENAME_BASE = "dino"
 NAN_VALUE = -9999999
+
 
 def transform(geom, source_epsg=4326, target_epsg=28992):
     source = osr.SpatialReference()
@@ -95,21 +98,29 @@ def try_get_field(feature, fieldname, n, default=""):
 
 
 def load_station_data(nitg_nr):
-    meetreeksen = SOAP_CLIENT.service.findMeetreeks(
-        WELL_NITG_NR=nitg_nr,
-        START_DATE='1900-01-01',
-        END_DATE='2017-12-01',
-        UNIT='SFL'
-    )
-    return (
-        (
-            meetreeks.WELL_NITG_NR, meetreeks.WELL_TUBE_NR,
-            list(
-                (level.DATE, level.LEVEL, level.REMARK)
-                for level in meetreeks.LEVELS
+    for _ in range(100):
+        try:
+            meetreeksen = SOAP_CLIENT.service.findMeetreeks(
+                WELL_NITG_NR=nitg_nr,
+                START_DATE='1900-01-01',
+                END_DATE='2017-12-01',
+                UNIT='SFL'
             )
-        ) for meetreeks in meetreeksen
-    )
+        except HTTPError:
+            logger.exception(
+                "Suds client is unavailable for well %s, waiting for 10 "
+                "minutes", nitg_nr)
+            sleep(600)
+            continue
+        return (
+            (
+                meetreeks.WELL_NITG_NR, meetreeks.WELL_TUBE_NR,
+                list(
+                    (level.DATE, level.LEVEL, level.REMARK)
+                    for level in meetreeks.LEVELS
+                )
+            ) for meetreeks in meetreeksen
+        )
 
 
 def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
@@ -274,6 +285,7 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
 def list_metadata():
     base = os.path.join(utils.DATA, FILENAME_BASE)
     logger.info("All y coordinates: %s", str(os.listdir(base)))
+    total = 0
     for root, dirs, files in os.walk(base):
         hdf5_files = [
             os.path.join(root, hdf5_file) for hdf5_file in files
@@ -282,12 +294,14 @@ def list_metadata():
         for filepath in hdf5_files:
             h5_file = h5py.File(filepath, "r")
             length = len(h5_file.get("metadata", []))
+            total += length
             if length == 0:
                 message = "File " + filepath + "doesn't contain metadata"
             else:
                 message = "File " + filepath + "contains " + str(length) + \
-                          "records"
+                          " records"
             logger.info(message)
+    logger.info("Total records found: %d", total)
 
 
 if __name__ == "__main__":
