@@ -2,6 +2,7 @@ from math import ceil
 from tempfile import NamedTemporaryFile
 from time import sleep
 from urllib.error import HTTPError
+from itertools import chain
 import logging
 import os
 
@@ -98,29 +99,36 @@ def try_get_field(feature, fieldname, n, default=""):
 
 
 def load_station_data(nitg_nr):
-    for _ in range(100):
+    periods = [(1900, 2017)]
+    meetreeksen = []
+    while len(periods) > 0:
+        start_year, end_year = periods.pop()
         try:
-            meetreeksen = SOAP_CLIENT.service.findMeetreeks(
-                WELL_NITG_NR=nitg_nr,
-                START_DATE='1900-01-01',
-                END_DATE='2017-12-01',
-                UNIT='SFL'
+            meetreeksen = meetreeksen + list(
+                SOAP_CLIENT.service.findMeetreeks(
+                    WELL_NITG_NR=nitg_nr,
+                    START_DATE=str(start_year) + '-01-01',
+                    END_DATE=str(end_year) + '-12-01',
+                    UNIT='SFL'
+                )
             )
-        except HTTPError:
+        except:
             logger.exception(
                 "Suds client is unavailable for well %s, waiting for 10 "
-                "minutes", nitg_nr)
+                "minutes, breaking query period in two", nitg_nr)
             sleep(600)
-            continue
-        return (
-            (
-                meetreeks.WELL_NITG_NR, meetreeks.WELL_TUBE_NR,
-                list(
-                    (level.DATE, level.LEVEL, level.REMARK)
-                    for level in meetreeks.LEVELS
-                )
-            ) for meetreeks in meetreeksen
-        )
+            halfway = int(start_year + (end_year - start_year) / 2)
+            periods.append((start_year, halfway))
+            periods.append((halfway, end_year))
+    return (
+        (
+            meetreeks.WELL_NITG_NR, meetreeks.WELL_TUBE_NR,
+            list(
+                (level.DATE, level.LEVEL, level.REMARK)
+                for level in meetreeks.LEVELS
+            )
+        ) for meetreeks in meetreeksen
+    )
 
 
 def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
@@ -250,11 +258,23 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
             )
             try:
                 dataset = h5_file.create_dataset(
-                    metadata[0] + str(metadata[1]), data.shape, dtype='f4')
+                    metadata[0] + str(metadata[1]),
+                    data.shape,
+                    maxshape=(None, 2),
+                    dtype='f4')
             except RuntimeError:
-                dataset = h5_file.get(metadata[0] + str(metadata[1]))
-                logger.debug("%s %s ALREADY EXISTS! ",
+                del h5_file[metadata[0] + str(metadata[1])]
+                dataset = h5_file.create_dataset(
+                    metadata[0] + str(metadata[1]),
+                    data.shape,
+                    maxshape=(None, 2),
+                    dtype='f4')
+                logger.warn("%s %s ALREADY EXISTS! Deleted.",
                              metadata[0], str(metadata[1]))
+            if dataset.shape != data.shape:
+                dataset.resize(data.shape)
+                logger.warn("%s %s HAS WRONG SHAPE! Resized.",
+                         metadata[0], str(metadata[1]))
             dataset[...] = data
             meta_data.append([str(x) for x in metadata])
             changed = True
