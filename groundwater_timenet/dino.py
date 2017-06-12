@@ -1,10 +1,9 @@
 from math import ceil
 from tempfile import NamedTemporaryFile
 from time import sleep
-from urllib.error import HTTPError
-from itertools import chain
 import logging
 import os
+import random
 
 from osgeo import ogr
 from osgeo import osr
@@ -302,10 +301,10 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
             skip_file.write(str(skip))
 
 
-def list_metadata():
+def list_metadata(shuffled=False):
     base = os.path.join(utils.DATA, FILENAME_BASE)
     logger.info("All y coordinates: %s", str(os.listdir(base)))
-    total = 0
+    total = []
     for root, dirs, files in os.walk(base):
         hdf5_files = [
             os.path.join(root, hdf5_file) for hdf5_file in files
@@ -313,15 +312,37 @@ def list_metadata():
         ]
         for filepath in hdf5_files:
             h5_file = h5py.File(filepath, "r")
-            length = len(h5_file.get("metadata", []))
-            total += length
+            metadata = h5_file.get("metadata", [])
+            total += [(filepath, x[0], x[1]) for x in metadata]
+            length = len(metadata)
             if length == 0:
                 message = "File " + filepath + "doesn't contain metadata"
             else:
                 message = "File " + filepath + "contains " + str(length) + \
                           " records"
             logger.info(message)
-    logger.info("Total records found: %d", total)
+    logger.info("Total records found: %d", len(total))
+    if shuffled:
+        random.shuffle(total)
+    return total
+
+
+def get_random(from_pct=0, to_pct=100):
+    all_data = list_metadata(True)
+    length = len(all_data)
+    from_ = int(length * from_pct / 100.0)
+    to_ = int(length * to_pct / 100.0)
+    for filepath, well_nr, filter_nr in all_data[from_:to_]:
+        h5_file = h5py.File(filepath, "r")
+        metadata_raw = [
+            y.decode('utf8') for x in h5_file.get("metadata", [])
+            for y in x if x[0] == well_nr and x[1] == filter_nr
+        ]
+        metadata = metadata_raw[:2] + [int(x) for x in metadata_raw[2:4]] + [
+            float(x) if x else np.nan for x in metadata_raw[4:]
+        ]
+        data = h5_file.get(metadata[0] + metadata[1], [])
+        yield metadata, data
 
 
 if __name__ == "__main__":
