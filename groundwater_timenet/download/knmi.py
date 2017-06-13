@@ -9,11 +9,20 @@ import requests
 try:
     from groundwater_timenet import utils
 except ImportError:
-    import utils
+    from .. import utils
 
 
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
+STATION_URL = ("https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/"
+               "daggegevens/etmgeg_{code}.zip")
+STATION_CODES = [
+    '209', '210', '215', '225', '235', '240', '242', '248', '249', '251',
+    '257', '258', '260', '265', '267', '269', '270', '273', '275', '277',
+    '278', '279', '280', '283', '285', '286', '290', '308', '310', '311',
+    '312', '313', '315', '316', '319', '323', '324', '330', '331', '340',
+    '343', '344', '348', '350', '356', '370', '375', '377', '380', '391'
+]
 
 def grab_daily_ftp(target_dir, source_base, filename_parser, start, end=None,
                    ftp_base='data.knmi.nl'):
@@ -105,16 +114,7 @@ def grab_evap_grids(target_dir="var/data/et/"):
 
 def load_knmi_measurement_data(target_dir='var/data/knmi_measurementstations'):
     """Downloads all knmi measurementstation data to target_dir."""
-    station_url = ("https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/"
-                   "daggegevens/etmgeg_{code}.zip")
-    station_codes = [
-        '209', '210', '215', '225', '235', '240', '242', '248', '249', '251',
-        '257', '258', '260', '265', '267', '269', '270', '273', '275', '277',
-        '278', '279', '280', '283', '285', '286', '290', '308', '310', '311',
-        '312', '313', '315', '316', '319', '323', '324', '330', '331', '340',
-        '343', '344', '348', '350', '356', '370', '375', '377', '380', '391'
-    ]
-    urls = ((code, station_url.format(code=code)) for code in station_codes)
+    urls = ((code, STATION_URL.format(code=code)) for code in STATION_CODES)
     utils.mkdirs(target_dir)
     for code, url in urls:
         response = requests.get(url)

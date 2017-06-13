@@ -5,6 +5,7 @@ Library with common functions.
 import logging
 import os
 
+PARSE_LOG = 'var/log/parse.log'
 HARVEST_LOG = 'var/log/harvest.log'
 DATA = 'var/data'
 

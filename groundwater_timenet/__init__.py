@@ -1,4 +1,3 @@
-import groundwater_timenet.knmi
-import groundwater_timenet.dino
-import groundwater_timenet.geotop
-import groundwater_timenet.utils
+import groundwater_timenet.download as download
+import groundwater_timenet.parse as parse
+import groundwater_timenet.utils as utils

@@ -14,7 +14,7 @@ long_description = '\n\n'.join([
 install_requires = [
     'h5py',
     'keras',
-    'netcdf4',
+    'netCDF4',
     'numpy',
     'osgeo',
     'pandas',
@@ -23,19 +23,22 @@ install_requires = [
     'tensorflow',
     ],
 
-setup(name='ggmn-site',
+setup(name='groundwater timenet',
       version=version,
-      description="TODO",
+      description="Dutch groundwater prediction (interpolation) model.",
       long_description=long_description,
       # Get strings from http://www.python.org/pypi?%3Aaction=list_classifiers
       classifiers=['Programming Language :: Python',
-                   'Framework :: Django',
+                   'Development Status :: 2 - Pre-Alpha',
+                   'License :: OSI Approved :: '
+                   'GNU General Public License v3 or later (GPLv3+)',
+                   'Programming Language :: Python :: 3 :: Only'
                    ],
       keywords=[],
       author='Roel van den Berg',
       author_email='roelvdberg@gmail.com',
       url='',
-      license='MIT',
+      license='GPLv3',
       packages=['groundwater_timenet'],
       include_package_data=True,
       zip_safe=False,
