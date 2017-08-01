@@ -12,6 +12,8 @@ long_description = '\n\n'.join([
     ])
 
 install_requires = [
+    'ipython',
+    'owslib',
     'h5py',
     'keras',
     'netCDF4',

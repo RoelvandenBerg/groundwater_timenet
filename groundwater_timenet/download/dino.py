@@ -5,7 +5,6 @@ import logging
 import os
 
 from osgeo import ogr
-from osgeo import osr
 from owslib.wfs import WebFeatureService
 from suds.client import Client as SoapClient
 import h5py
@@ -25,15 +24,6 @@ WFS_LAYER_NAME = 'gdn:Grondwateronderzoek'
 SOAP_CLIENT = SoapClient("http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
 FILENAME_BASE = "dino"
 NAN_VALUE = -9999999
-
-
-def transform(geom, source_epsg=4326, target_epsg=28992):
-    source = osr.SpatialReference()
-    source.ImportFromEPSG(source_epsg)
-    target = osr.SpatialReference()
-    target.ImportFromEPSG(target_epsg)
-    transformation = osr.CoordinateTransformation(source, target)
-    geom.Transform(transformation)
 
 
 def get_features(wfs, layer_name, minx, miny, maxx, maxy):
@@ -148,7 +138,7 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     feature = next(layer)
     geom = feature.geometry()
     # reproject it to Amersfoort / RD New
-    transform(geom)
+    utils.transform(geom)
     (xmin, xmax, ymin, ymax) = (round(x) for x in geom.GetEnvelope())
 
     # get rows

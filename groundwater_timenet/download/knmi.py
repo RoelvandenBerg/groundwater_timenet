@@ -24,6 +24,22 @@ STATION_CODES = [
     '343', '344', '348', '350', '356', '370', '375', '377', '380', '391'
 ]
 
+
+
+
+def download_measurementstation_metadata():
+    """
+    Downloads a file with in the header 
+    :return: 
+    """
+    data = {'stns': "ALL"}
+    url = "http://projects.knmi.nl/klimatologie/monv/reeksen/getdata_rr.cgi"
+    response = requests.post(url=url, data=data)
+    with open('var/data/knmi_measurementstations/knmi_metadata.txt', 'w'
+              ) as f:
+        f.write(response.text)
+
+
 def grab_daily_ftp(target_dir, source_base, filename_parser, start, end=None,
                    ftp_base='data.knmi.nl'):
     """

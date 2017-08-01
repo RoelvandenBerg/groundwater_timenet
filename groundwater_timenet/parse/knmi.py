@@ -1,9 +1,5 @@
 import logging
 import os
-import random
-
-import h5py
-import numpy as np
 
 try:
     from groundwater_timenet import utils
@@ -22,93 +18,116 @@ HEADER = (
     'UG,   UX,  UXH,   UN,  UNH, EV24\n'
 )
 
-HISTORICAL_KNMI_LOCATIONS = {
-    ("210", "Valkenburg"): (88625, 466577),
-    ("235", "De Kooy" ): (114397, 549755),
-    ("240", "Schiphol"): (113824, 481139),
-    ("242", "Vlieland"): (123580, 583073),
-    ("249", "Berkhout"): (127668, 518133),
-    ("251", "Hoorn Terschelling"): (152524, 599665),
-    ("257", "Wijk aan Zee"): (101546, 501657),
-    ("260", "De Bilt"): (141031, 456881),
-    ("265", "Soesterberg"): (147888, 460575),
-    ("267", "Stavoren"): (154739, 545876),
-    ("269", "Lelystad"): (163801, 495811),
-    ("270", "Leeuwarden"): (179234, 581177),
-    ("273", "Marknesse"): (188536, 523736),
-    ("275", "Deelen"): (187889, 451407),
-    ("277", "Lauwersoog"): (209042, 603680),
-    ("278", "Heino"): (214809, 494312),
-    ("279", "Hoogeveen"): (234635, 529835),
-    ("280", "Eelde"): (235084, 570652),
-    ("283", "Hupsel"): (241587, 453906),
-    ("286", "Nieuw Beerta"): (272792, 580703),
-    ("290", "Twenthe"): (257125, 476459),
-    ("310", "Vlissingen"): (30775, 386068),
-    ("319", "Westdorpe"): (48767, 359693),
-    ("323", "Wilhelminadorp"): (50658, 394893),
-    ("330", "Hoek van Holland"): (67720, 444644),
-    ("340", "Woensdrecht"): (82903, 385058),
-    ("344", "Rotterdam"): (90594, 442442),
-    ("348", "Cabauw"): (122663, 442132),
-    ("350", "Gilze-Rijen"): (123531, 397623),
-    ("356", "Herwijnen"): (138656, 429074),
-    ("370", "Eindhoven"): (154731, 384546),
-    ("375", "Volkel"): (176648, 406843),
-    ("377", "Ell"): (181522, 356802),
-    ("380", "Maastricht"): (181696, 323428),
-    ("391", "Arcen"): (211437, 390423),
-
-    # Antique stations:
-    ("049", "Delft, (Leiden) en Rijnsburg"): (83775, 446244),
-    ("056", "Breda"): (113146, 399553),
-    ("057", "Breda"): (113146, 399553),
-    ("043", "Utrecht"): (135321, 456900),
-    ("048", "Haarlem"): (104809, 488641),
-    ("044", "Haarlem"): (104809, 488641),
-    ("042", "Zwanenburg"): (110482, 488586),
-    ("050", "Leiden"): (94301, 464650),
-    ("047", "Bergen"): (109639, 520122),
-    ("046", "Alkmaar"): (111878, 518247),
-    ("052", "Amsterdam"): (121817, 486643),
-    ("053", "Amsterdam"): (121817, 486643),
-    ("054", "Vlissingen"): (28458, 386126),
-    ("003", "Vlissingen"): (28458, 386126),
-    ("045", "Delft"): (84919, 446228),
-    ("055", "Middelburg en Oostkapelle"): ((32068, 391601), (25317, 399190)),
-    ("001", "De Bilt"): (141031, 456881),
-    ("002", "Den Helder"): (112189, 553484),
-    ("006", "Groningen"): (232672, 581743),
-    ("007", "Maastricht"): (175856, 317838),
-    # Diverse Antieke reeksen
-    ("", "Leiden (Senguerdius)"): (94279, 462795),
-    ("", "Fremery Utrecht"): (138747, 456888),
-    # KNMI-neerslagstations
-    ("009", "Den Helder"): (112189, 553484),
-    ("011", "West Terschelling"): (143647, 597823),
-    ("025", "De Kooy"): (114366, 546046),
-    ("139", "Groningen"): (236043, 579944),
-    ("144", "Ter Apel"): (268045, 545336),
-    ("222", "Hoorn"): (133308, 518105),
-    ("328", "Heerde"): (200108, 490446),
-    ("438", "Hoofddorp"): (105833, 477503),
-    ("550", "De Bilt"): (139883, 455030),
-    ("666", "Winterswijk"): (245182, 444696),
-    ("737", "Kerkwerve"): (49850, 411603),
-    ("745", "Axel"): (51209, 365207),
-    ("770", "Westdorpe"): (47603, 359718),
-    ("828", "Oudenbosch"): (95798, 397872),
-    ("961", "Roermond"): (195516, 355040),
-}
+# All uncommented stations contain both rain and evaporation
+STATION_META = [
+#     ("209", (4.518, 52.465, 0.00, "IJMOND")),
+     ("210", (4.430, 52.171, -0.20, "VALKENBURG")),
+     ("215", (4.437, 52.141, -1.10, "VOORSCHOTEN")),
+#     ("225", (4.555, 52.463, 4.40, "IJMUIDEN")),
+     ("235", (4.781, 52.928, 1.20, "DE KOOY")),
+     ("240", (4.790, 52.318, -3.30, "SCHIPHOL")),
+#     ("242", (4.921, 53.241, 10.80, "VLIELAND")),
+#     ("248", (5.174, 52.634, 0.80, "WIJDENES")),
+     ("249", (4.979, 52.644, -2.40, "BERKHOUT")),
+     ("251", (5.346, 53.392, 0.70, "HOORN (TERSCHELLING)")),
+     ("257", (4.603, 52.506, 8.50, "WIJK AAN ZEE")),
+#     ("258", (5.401, 52.649, 7.30, "HOUTRIBDIJK")),
+     ("260", (5.180, 52.100, 1.90, "DE BILT")),
+     ("265", (5.274, 52.130, 13.90, "SOESTERBERG")),
+     ("267", (5.384, 52.898, -1.30, "STAVOREN")),
+     ("269", (5.520, 52.458, -3.70, "LELYSTAD")),
+     ("270", (5.752, 53.224, 1.20, "LEEUWARDEN")),
+     ("273", (5.888, 52.703, -3.30, "MARKNESSE")),
+     ("275", (5.873, 52.056, 48.20, "DEELEN")),
+     ("277", (6.200, 53.413, 2.90, "LAUWERSOOG")),
+     ("278", (6.259, 52.435, 3.60, "HEINO")),
+     ("279", (6.574, 52.750, 15.80, "HOOGEVEEN")),
+     ("280", (6.585, 53.125, 5.20, "EELDE")),
+     ("283", (6.657, 52.069, 29.10, "HUPSEL")),
+#     ("285", (6.399, 53.575, 0.00, "HUIBERTGAT")),
+     ("286", (7.150, 53.196, -0.20, "NIEUW BEERTA")),
+     ("290", (6.891, 52.274, 34.80, "TWENTHE")),
+#     ("308", (3.379, 51.381, 0.00, "CADZAND")),
+     ("310", (3.596, 51.442, 8.00, "VLISSINGEN")),
+#     ("311", (3.672, 51.379, 0.00, "HOOFDPLAAT")),
+#     ("312", (3.622, 51.768, 0.00, "OOSTERSCHELDE")),
+#     ("313", (3.242, 51.505, 0.00, "VLAKTE V.D. RAAN")),
+#     ("315", (3.998, 51.447, 0.00, "HANSWEERT")),
+#     ("316", (3.694, 51.657, 0.00, "SCHAAR")),
+     ("319", (3.861, 51.226, 1.70, "WESTDORPE")),
+     ("323", (3.884, 51.527, 1.40, "WILHELMINADORP")),
+#     ("324", (4.006, 51.596, 0.00, "STAVENISSE")),
+     ("330", (4.122, 51.992, 11.90, "HOEK VAN HOLLAND")),
+#     ("331", (4.193, 51.480, 0.00, "THOLEN")),
+#     ("340", (4.342, 51.449, 19.20, "WOENSDRECHT")),
+#     ("343", (4.313, 51.893, 3.50, "R'DAM-GEULHAVEN")),
+     ("344", (4.447, 51.962, -4.30, "ROTTERDAM")),
+     ("348", (4.926, 51.970, -0.70, "CABAUW")),
+     ("350", (4.936, 51.566, 14.90, "GILZE-RIJEN")),
+     ("356", (5.146, 51.859, 0.70, "HERWIJNEN")),
+     ("370", (5.377, 51.451, 22.60, "EINDHOVEN")),
+     ("375", (5.707, 51.659, 22.00, "VOLKEL")),
+     ("377", (5.763, 51.198, 30.00, "ELL")),
+     ("380", (5.762, 50.906, 114.30, "MAASTRICHT")),
+     ("391", (6.197, 51.498, 19.50, "ARCEN"))
+]
 
 
-def raw_data(directory):
+def int_or_none(x):
+    try:
+        return int(x)
+    except ValueError:
+        return None
+
+
+def raw_data(directory='var/data/knmi_measurementstations'):
     for filename in os.listdir(directory):
-        path = os.path.join(directory, filename)
-        with open(path, 'r') as f:
-            data = f.read().split(HEADER)[1]
-            data_lines = data.split('\n')
-            yield [
-                [int(l.strip(" ")) for l in line.split(',')]
-                for line in data_lines
-            ]
+        if 'etmgeg' in filename:
+            id_ = filename.replace('etmgeg_', '').replace('.txt', '')
+            path = os.path.join(directory, filename)
+            with open(path, 'r') as f:
+                data = f.read().split(HEADER)[1]
+                data_lines = data.split('\n')
+                yield (id_, [
+                    [int_or_none(l) for l in line.split(',')]
+                    for line in data_lines
+                    if line
+                ])
+
+
+WEATHERSTATION_GEOMS = utils.multipoint((v[0], v[1]) for _, v in STATION_META)
+
+
+COLLECTED_DATA = dict(raw_data())
+
+
+def closest_measurementstation_metadata(x, y):
+    point = utils.point(x, y)
+    i = utils.closest_point(point, WEATHERSTATION_GEOMS)
+    return STATION_META[i]
+
+
+def data_from_metadata(metadata):
+    station_code, meta = metadata
+    return COLLECTED_DATA[station_code]
+
+
+def measurementstation_data(x, y):
+    return data_from_metadata(closest_measurementstation_metadata(x, y))
+
+
+# # Code to find out rain / evap datasets:
+# RAIN_HEADERS = ['RH', 'RHX', 'RHXH']
+# EVAP_HEADERS = ['EV24']
+#
+# header = [x.strip(' ') for x in HEADER.strip("\n").split(",")]
+# dataset_contents = [
+#     [dataset[0][0]] +
+#     [label for i, label in enumerate(header) if not all(line[i] is None
+#                                                     for line in dataset)]
+#     for dataset in COLLECTED_DATA
+# ]
+# evap = [l[0] for l in dataset_contents if any(xx in l for xx in EVAP_HEADERS)]
+# rain = [l[0] for l in dataset_contents if any(xx in l for xx in RAIN_HEADERS)]
+# # make sure both are equal:
+# all(xx == evap[i] for i, xx in rain)
