@@ -96,7 +96,7 @@ def raw_data(directory='var/data/knmi_measurementstations'):
 
 
 WEATHERSTATION_GEOMS = utils.multipoint((v[0], v[1]) for _, v in STATION_META)
-
+utils.transform(WEATHERSTATION_GEOMS)
 
 COLLECTED_DATA = dict(raw_data())
 
