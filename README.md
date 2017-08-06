@@ -16,8 +16,8 @@ levels.
 - [X] DINO groundwater levels
 - [X] KNMI rain measurement station data
 - [X] KNMI evaporation measurement station data
-- [ ] KNMI rain
-- [ ] KNMI evapotranspiration
+- [X] KNMI rain
+- [X] KNMI evapotranspiration
 - [ ] soil data
 - [ ] other relevant data
 ##### build a neural network with Keras / Tensorflow:
@@ -31,7 +31,7 @@ levels.
 
 ## Data Sources
 ### Projection
-Dutch spatial data uses _Amersfoort / RD New_ projection. Since the datasources
+Dutch spatial data uses _Amersfoort / RD New_ projection (ESPG ). Since the datasources
 we use use this projection we do not provide an interface that transforms this
 data.
 
@@ -125,6 +125,19 @@ Netherlands between -50.0m 106.5m NAP.
 
 ### KNMI
 #### Rain
+Rain can be downloaded from [this KNMI site](https://data.knmi.nl/datasets/radar_corr_accum_24h/1.0).
+And evapotranspiration from [this KNMI site](https://data.knmi.nl/datasets/EV24/2).
+Unpack rain and evapotranspiration (years only) respectively in `var/data/rain` and `var/data/et`. This means your folder structure would look something like this:
+
+Because we are interested in timeseries, not in spatial grids, we reshape the data to 3D 10 km matrices with a time dimension to improve performance.
+
+For now these files seem to be broken:
+- var/data/rain/2016/03/07RAD_NL25_RAC_24H_201603090800.h5
+- var/data/et/1974/12/05/INTER_OPER_R___EV24____L3__19741203T000000_19741204T000000_0002.nc
+- var/data/et/1976/10/04/INTER_OPER_R___EV24____L3__19761002T000000_19761003T000000_0002.nc
+- var/data/et/1979/01/09/INTER_OPER_R___EV24____L3__19790107T000000_19790108T000000_0002.nc
+
+
 #### Evapotranspiration
 #### Weather station data
 Weather station data are downloaded from the [KNMI website](https://www.knmi.nl/nederland-nu/klimatologie/daggegevens). We should be careful using the data however:

@@ -12,14 +12,15 @@ long_description = '\n\n'.join([
     ])
 
 install_requires = [
-    'ipython',
-    'owslib',
     'h5py',
+    'ipython',
     'keras',
     'netCDF4',
     'numpy',
     'osgeo',
+    'owslib',
     'pandas',
+    'pyproj',
     'requests',
     'suds-py3',
     'tensorflow',

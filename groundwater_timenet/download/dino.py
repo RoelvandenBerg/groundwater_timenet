@@ -1,14 +1,15 @@
-from math import ceil
-from tempfile import NamedTemporaryFile
-from time import sleep
 import logging
 import os
+from tempfile import NamedTemporaryFile
+from time import sleep
 
+import h5py
+import numpy as np
 from osgeo import ogr
 from owslib.wfs import WebFeatureService
 from suds.client import Client as SoapClient
-import h5py
-import numpy as np
+
+from groundwater_timenet.utils import sliding_geom_window
 
 try:
     from groundwater_timenet import utils
@@ -119,74 +120,6 @@ def load_station_data(nitg_nr):
     )
 
 
-def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
-    """
-    Generates bounding boxes that fit a shape.
-    Leans heavily on https://pcjericks.github.io/py-gdalogr-cookbook/
-
-    :param source_json: WGS84 geojson of the area the sliding window is for
-    :param gridHeight: height in meters of each sliding window grid cell
-    :param gridWidth: width in meters of each sliding window grid cell
-    :return: grid cell generator with bounding box (minx, miny, maxx, maxy) for
-        source json
-    """
-    driver = ogr.GetDriverByName('GeoJSON')
-    data_source = driver.Open(source_json, 0)
-    if data_source is None:
-        raise ValueError('%s is not a valid json', source_json)
-    layer = data_source.GetLayer()
-    feature = next(layer)
-    geom = feature.geometry()
-    # reproject it to Amersfoort / RD New
-    utils.transform(geom)
-    (xmin, xmax, ymin, ymax) = (round(x) for x in geom.GetEnvelope())
-
-    # get rows
-    rows = ceil((ymax-ymin)/gridHeight)
-    # get columns
-    cols = ceil((xmax-xmin)/gridWidth)
-
-    # start grid cell envelope
-    ringXleftOrigin = xmin
-    ringXrightOrigin = xmin + gridWidth
-    ringYtopOrigin = ymax
-    ringYbottomOrigin = ymax-gridHeight
-
-    # create grid cells
-    for _ in range(cols):
-        # reset envelope for rows
-        ringYtop = ringYtopOrigin
-        ringYbottom = ringYbottomOrigin
-
-        for _ in range(rows):
-            ring = ogr.Geometry(ogr.wkbLinearRing)
-            ring.AddPoint(ringXleftOrigin, ringYtop)
-            ring.AddPoint(ringXrightOrigin, ringYtop)
-            ring.AddPoint(ringXrightOrigin, ringYbottom)
-            ring.AddPoint(ringXleftOrigin, ringYbottom)
-            ring.AddPoint(ringXleftOrigin, ringYtop)
-            poly = ogr.Geometry(ogr.wkbPolygon)
-            poly.AddGeometry(ring)
-
-            # TODO: Fix this, within seems to be within the envelope, which is
-            # useless for our case since the grid is based on the envelope.
-            if poly.Within(geom) or poly.Intersects(geom):
-                yield (
-                    ringXleftOrigin + gridWidth,
-                    ringYtop + gridHeight,
-                    ringXrightOrigin + gridWidth,
-                    ringYbottom + gridHeight
-                )
-
-            # new envelope for next poly
-            ringYtop -= gridHeight
-            ringYbottom -= gridHeight
-
-        # new envelope for next poly
-        ringXleftOrigin += gridWidth
-        ringXrightOrigin += gridWidth
-
-
 def load_dino_grid_cell(features):
     for (well, x, y, start, end,
          (top_depth_mv_up, top_depth_mv_down),
@@ -213,20 +146,12 @@ def load_dino_groundwater(skip=0, url=WFS_URL, layer_name=WFS_LAYER_NAME):
         yield load_dino_grid_cell(features), minx, miny
 
 
-def parse_filepath(minx, miny, filename_base="dino"):
-    filepath = os.path.join(
-        utils.DATA, filename_base, str(miny), str(minx) + ".hdf5"
-    )
-    utils.mkdirs(filepath)
-    return filepath
-
-
 def download_hdf5(skip=0, filename_base=FILENAME_BASE):
     dino_data = load_dino_groundwater(skip)
     skip_filepath = os.path.join(utils.DATA, filename_base, "skip_count.txt")
     total_count = 0
     for grid_cell, minx, miny, in dino_data:
-        filepath = parse_filepath(minx, miny, filename_base)
+        filepath = utils.parse_filepath(minx, miny, filename_base)
         h5_file = h5py.File(filepath, "w", libver='latest')
         meta_data = []
         changed = False
@@ -291,7 +216,6 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
 
 
 if __name__ == "__main__":
-    list_metadata()
     skip_filepath = os.path.join(utils.DATA, FILENAME_BASE, "skip_count.txt")
     utils.mkdirs(skip_filepath)
     try:
