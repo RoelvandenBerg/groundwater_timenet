@@ -22,7 +22,6 @@ logger = utils.setup_logging(__name__, utils.HARVEST_LOG, logging.INFO)
 
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'
 WFS_LAYER_NAME = 'gdn:Grondwateronderzoek'
-SOAP_CLIENT = SoapClient("http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
 FILENAME_BASE = "dino"
 NAN_VALUE = -9999999
 
@@ -88,13 +87,15 @@ def try_get_field(feature, fieldname, n, default=""):
 
 
 def load_station_data(nitg_nr):
+    soap_client = SoapClient(
+        "http://www.dinoservices.nl/gwservices/gws-v11?wsdl")
     periods = [(1900, 2017)]
     meetreeksen = []
     while len(periods) > 0:
         start_year, end_year = periods.pop()
         try:
             meetreeksen = meetreeksen + list(
-                SOAP_CLIENT.service.findMeetreeks(
+                soap_client.service.findMeetreeks(
                     WELL_NITG_NR=nitg_nr,
                     START_DATE=str(start_year) + '-01-01',
                     END_DATE=str(end_year) + '-12-01',

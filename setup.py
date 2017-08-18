@@ -20,7 +20,6 @@ install_requires = [
     'osgeo',
     'owslib',
     'pandas',
-    'pyproj',
     'requests',
     'suds-py3',
     'tensorflow',

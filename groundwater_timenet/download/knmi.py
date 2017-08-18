@@ -4,9 +4,10 @@ import io
 import os
 import zipfile
 
+import osr
+import gdal
 import h5py
 import numpy as np
-import pyproj
 import requests
 
 try:
@@ -165,9 +166,14 @@ def rain_timeseries(x, y, files):
     for filepath in files:
         h5file = h5py.File(filepath, 'r', libver='latest')
         dataset = h5file.get('image1/image_data')
-        value = dataset[x,y]
+        try:
+            value = dataset[x,y]
+        except:
+            logger.exception(
+                'file %s does not have dataset image1/image_data', filepath)
+            yield np.NaN
         if value == RAIN_NAN_VALUE:
-            yield None
+            yield np.NaN
         else:
             yield value
 
@@ -205,18 +211,18 @@ def et_timeseries(x, y, files):
         dataset = h5file.get('prediction')
         value = dataset[0, x, y]
         if value == ET_NAN_VALUE:
-            yield None
+            yield np.NaN
         else:
             yield value
 
 
 def et_timeseries_dataset(minx, miny, maxx, maxy, files, points):
     grid = [
-        (x, y) for x, y, point in points
+        (x, y) for point, x, y in points
         if utils.within(point, minx, miny, maxx, maxy)
     ]
     # this should result in one value per 10.000m gridcell
-    np.array([
+    return np.array([
         [
             list(et_timeseries(x, y, files))
             for x, y in grid
@@ -235,23 +241,29 @@ def add_timeseries_data(minx, miny, maxx, maxy, files,
     dataset[...] = data
 
 
+def apply_transform(x, y, coord_transform,
+                    asine=(0.0, 1.0, 0, -3649.98, 0, -1.0)):
+    return [round(f) for f in gdal.ApplyGeoTransform(
+        asine, *coord_transform.TransformPoint(x, y)[:2])]
+
+
 def reshape_rasters(rain_root='rain', et_root='et'):
     rain_files = get_raster_filenames(rain_root)
     et_files = get_raster_filenames(et_root)
     et_points = points_list(et_files[0])
 
-    rain_proj = pyproj.Proj(
+    rain_proj = osr.SpatialReference(osr.GetUserInputAsWKT(
         '+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 +a=6378.14 +b=6356.75 '
-        '+x_0=0 y_0=0'
-    )
-    rd_proj = pyproj.Proj(init='epsg:28992')
+        '+x_0=0 y_0=0'))
+    rd_proj = osr.SpatialReference(osr.GetUserInputAsWKT('epsg:28992'))
     sliding_geom_window = utils.sliding_geom_window('NederlandRegion.json')
+    coord_transform = osr.CoordinateTransformation(rd_proj, rain_proj)
     for minx, miny, maxx, maxy in sliding_geom_window:
         filepath = utils.parse_filepath(
             minx, miny, filename_base=FILENAME_BASE)
         h5_file = h5py.File(filepath, "w", libver='latest')
-        rain_minx, rain_miny = pyproj.transform(rd_proj, rain_proj, minx, miny)
-        rain_maxx, rain_maxy = pyproj.transform(rd_proj, rain_proj, maxx, maxy)
+        rain_minx, rain_miny = apply_transform(minx, miny, coord_transform)
+        rain_maxx, rain_maxy = apply_transform(maxx, maxy, coord_transform)
         add_timeseries_data(
             rain_minx, rain_miny, rain_maxx, rain_maxy, rain_files,
             rain_timeseries_dataset, h5_file, rain_root, None
@@ -260,7 +272,7 @@ def reshape_rasters(rain_root='rain', et_root='et'):
             minx, miny, maxx, maxy, et_files, et_timeseries_dataset,
             h5_file, et_root, et_points
         )
-
+        logger.debug("Added rain and et data for minx %d, miny %d, maxx %d, maxy %d", minx, miny, maxx, maxy)
 
 
 if __name__ == '__main__':
