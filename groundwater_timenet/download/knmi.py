@@ -35,8 +35,8 @@ STATION_CODES = [
 
 def download_measurementstation_metadata():
     """
-    Downloads a file with in the header 
-    :return: 
+    Downloads a file with in the header
+    :return:
     """
     data = {'stns': "ALL"}
     url = "http://projects.knmi.nl/klimatologie/monv/reeksen/getdata_rr.cgi"
@@ -159,7 +159,7 @@ def get_raster_filenames(rootdir):
     if faulty:
         raise OSError(
             'Broken HDF5 files found:\n- {}'.format('\n- '.join(faulty)))
-    return files
+    return np.array([f.encode('utf8') for f in files])
 
 
 def rain_timeseries(x, y, files):
@@ -178,67 +178,75 @@ def rain_timeseries(x, y, files):
             yield value
 
 
-def rain_timeseries_dataset(minx, miny, maxx, maxy, files, _=None):
-    #TODO: bug
-    print(minx, miny, maxx, maxy)
+def rain_timeseries_dataset(
+        minx, miny, maxx, maxy, files, points=None, top_left=None):
     # this should return a 10x10 matrix for the 10.000 m gridcell
+    print('creating rain_timeseries')
     return np.array([
         [
             list(rain_timeseries(x, y, files))
             for y in range(miny, maxy)
         ] for x in range(minx, maxx)
-    ])
+    ]), None
 
 
-def points_list(example_file):
+def points_array(example_file):
     h5file = h5py.File(example_file, 'r', libver='latest')
     lat = h5file.get('lat')
     lon = h5file.get('lon')
-    val = [
-        (p, x, y)
-        for p, x, y in [
-            (utils.point(float(lon[x, y]), float(lat[x, y])), x, y)
-            for x in range(350)
-            for y in range(300)
-        ] if not utils.transform(p)
-    ]
-    return val
+    return np.array([
+        [
+            p.GetPoint() for p in (
+                utils.point(float(lon[x, y]), float(lat[x, y])) for x in
+                range(350)
+            ) if not utils.transform(p)
+        ] for y in range(300)
+    ])
+
+
+def find_top_left(top_left, points, minx, miny, maxx, maxy):
+    x, y = top_left
+    # each gridcell is 10x10, but we have to find the start first:
+    step = 1 if x == 0 and y == 349 else 10
+    for y in range(y, -1, step * -1):
+        for x in range(x, 300, step):
+            if utils.within(points[x][y], minx, miny, maxx, maxy):
+                print("\nfound %d, %d" % (x, y))
+                return x, y
+        x = 0
+    print('\nLast point: %d, %d' % (x, y))
+    return x, y
+
+
+def get_h5_value(x, y, filepath):
+    with h5py.File(filepath, 'r', libver='latest') as h5file:
+        dataset = h5file.get('prediction')
+        return dataset[0, max(0, y - 10):y, x:min(x + 10, 299)][()]
 
 
 def et_timeseries(x, y, files):
-    for filepath in files:
-        h5file = h5py.File(filepath, 'r', libver='latest')
-        dataset = h5file.get('prediction')
-        value = dataset[0, x, y]
-        if value == ET_NAN_VALUE:
-            yield np.NaN
-        else:
-            yield value
+    timeseries = np.array([get_h5_value(x, y, filepath) for filepath in files])
+    return np.moveaxis(timeseries, 0, -1)
 
 
-def et_timeseries_dataset(minx, miny, maxx, maxy, files, points):
-    grid = [
-        (x, y) for point, x, y in points
-        if utils.within(point, minx, miny, maxx, maxy)
-    ]
-    # this should result in one value per 10.000m gridcell
-    return np.array([
-        [
-            list(et_timeseries(x, y, files))
-            for x, y in grid
-        ]
-    ])
+def et_timeseries_dataset(
+        minx, miny, maxx, maxy, files, points, top_left):
+    x, y = find_top_left(top_left, points, minx, miny, maxx, maxy)
+    return et_timeseries(x, y, files), (x, y)
 
 
 def add_timeseries_data(minx, miny, maxx, maxy, files,
                         timeseries_dataset_method, h5_file, dataset_name,
-                        points):
-    data = timeseries_dataset_method(minx, miny, maxx, maxy, files, points)
+                        points, top_left=None):
+    print(top_left)
+    data, top_left = timeseries_dataset_method(
+        minx, miny, maxx, maxy, files, points, top_left)
     dataset = h5_file.create_dataset(
         dataset_name,
         data.shape,
         dtype=data.dtype)
     dataset[...] = data
+    return top_left
 
 
 def apply_transform(x, y, coord_transform,
@@ -247,9 +255,32 @@ def apply_transform(x, y, coord_transform,
         asine, *coord_transform.TransformPoint(x, y)[:2])]
 
 
+def raster_filenames(root, source_netcdf=None):
+    source_netcdf = source_netcdf or "var/data/cache/{}files.nc".format(root)
+    filenames = utils.cache_nc(
+        get_raster_filenames, source_netcdf,
+        dataset_name=root,
+        rootdir=root,
+    )
+    return [f.decode('utf8') for f in filenames]
+
+
+def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
+    array = utils.cache_nc(
+        points_array, source_netcdf,
+        example_file=ex_et_file,
+    )
+    points = (
+        ((float(x), float(y)) for x, y, _ in array_row) for array_row in array)
+    return [
+        [utils.point(*point) for point in points_row] for points_row in points
+    ]
+
+
 def reshape_rasters(rain_root='rain', et_root='et'):
-    rain_files = get_raster_filenames(rain_root)
-    et_files = get_raster_filenames(et_root)
+    rain_root = 'rain'; et_root = 'et'
+    rain_files = raster_filenames(root=rain_root)
+    et_files = raster_filenames(root=et_root)
     et_points = points_list(et_files[0])
 
     rain_proj = osr.SpatialReference(osr.GetUserInputAsWKT(
@@ -258,9 +289,10 @@ def reshape_rasters(rain_root='rain', et_root='et'):
     rd_proj = osr.SpatialReference(osr.GetUserInputAsWKT('epsg:28992'))
     sliding_geom_window = utils.sliding_geom_window('NederlandRegion.json')
     coord_transform = osr.CoordinateTransformation(rd_proj, rain_proj)
+    top_left = (0, 349)
     for minx, miny, maxx, maxy in sliding_geom_window:
         filepath = utils.parse_filepath(
-            minx, miny, filename_base=FILENAME_BASE)
+            int(minx), int(miny), filename_base=FILENAME_BASE)
         h5_file = h5py.File(filepath, "w", libver='latest')
         rain_minx, rain_miny = apply_transform(minx, miny, coord_transform)
         rain_maxx, rain_maxy = apply_transform(maxx, maxy, coord_transform)
@@ -268,11 +300,14 @@ def reshape_rasters(rain_root='rain', et_root='et'):
             rain_minx, rain_miny, rain_maxx, rain_maxy, rain_files,
             rain_timeseries_dataset, h5_file, rain_root, None
         )
-        add_timeseries_data(
+        top_left = add_timeseries_data(
             minx, miny, maxx, maxy, et_files, et_timeseries_dataset,
-            h5_file, et_root, et_points
+            h5_file, et_root, et_points, top_left
         )
-        logger.debug("Added rain and et data for minx %d, miny %d, maxx %d, maxy %d", minx, miny, maxx, maxy)
+        logger.debug(top_left)
+        logger.debug(
+            "Added rain and et data for minx %d, miny %d, maxx %d, maxy %d. "
+            "ET top left: %d %d", minx, miny, maxx, maxy, *top_left)
 
 
 if __name__ == '__main__':

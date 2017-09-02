@@ -6,6 +6,8 @@ import logging
 import os
 from math import ceil
 
+import numpy as np
+import h5py
 from osgeo import ogr
 from osgeo import osr
 
@@ -79,7 +81,8 @@ def within(geom, minx, miny, maxx, maxy):
     return poly.Within(geom) or poly.Intersects(geom)
 
 
-def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
+def create_sliding_geom_window(
+        source_json='NederlandRegion.json', gridHeight=10000, gridWidth=10000):
     """
     Generates bounding boxes that fit a shape.
     Leans heavily on https://pcjericks.github.io/py-gdalogr-cookbook/
@@ -90,6 +93,9 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     :return: grid cell generator with bounding box (minx, miny, maxx, maxy) for
         source json
     """
+    source_json = 'NederlandRegion.json'
+    gridHeight=10000
+    gridWidth=10000
     driver = ogr.GetDriverByName('GeoJSON')
     data_source = driver.Open(source_json, 0)
     if data_source is None:
@@ -99,42 +105,67 @@ def sliding_geom_window(source_json, gridHeight=10000, gridWidth=10000):
     geom = feature.geometry()
     # reproject it to Amersfoort / RD New
     transform(geom)
-    (xmin, xmax, ymin, ymax) = (round(x) for x in geom.GetEnvelope())
+    (xmin, xmax, ymin, ymax) = geom.GetEnvelope()
+    # make sure to remain within the geometry to prevent segmentation faults:
+    xmin, xmax, ymin, ymax = ceil(xmin), int(xmax), ceil(ymin), int(ymax)
+    xmin_rounded = int(xmin/gridWidth)*gridWidth
+    xmax_rounded = int(ceil(xmax/gridWidth))*gridWidth
+    ymin_rounded = int(ymin/gridHeight)*gridHeight
+    ymax_rounded = int(ceil(ymax/gridHeight))*gridHeight
 
-    # get rows
-    rows = ceil((ymax-ymin)/gridHeight)
-    # get columns
-    cols = ceil((xmax-xmin)/gridWidth)
+    return np.array([
+        (xmin_c, ymin_c, xmax_c, ymax_c)
+        for xmin_c, ymin_c, xmax_c, ymax_c in
+        (
+            (
+                max(x, xmin),
+                max(y - gridHeight, ymin),
+                min(x + gridWidth, xmax),
+                min(y, ymax)
+            ) for y in range(ymax_rounded, ymin_rounded, -gridWidth)
+            for x in range(xmin_rounded, xmax_rounded, gridWidth)
+        ) if within(geom, xmin_c, ymin_c, xmax_c, ymax_c)
+    ])
 
-    # start grid cell envelope
-    ringXleftOrigin = xmin
-    ringXrightOrigin = xmin + gridWidth
-    ringYtopOrigin = ymax
-    ringYbottomOrigin = ymax-gridHeight
 
-    # create grid cells
-    for _ in range(cols):
-        # reset envelope for rows
-        ringYtop = ringYtopOrigin
-        ringYbottom = ringYbottomOrigin
+def sliding_geom_window(
+        source_json='NederlandRegion.json', gridHeight=10000, gridWidth=10000,
+        source_netcdf="var/data/cache/sliding_geom.nc"):
+    geom_array = cache_nc(
+        create_sliding_geom_window,  source_netcdf, "geom_window",
+        source_json=source_json,
+        gridHeight=gridHeight,
+        gridWidth=gridWidth
+    )
+    return (
+        (float(a), float(b), float(c), float(d)) for a, b, c, d in
+        iter(geom_array)
+    )
 
-        for _ in range(rows):
-            if (geom, ringXleftOrigin, ringYtop, ringXrightOrigin, ringYbottom
-                    ):
-                yield (
-                    ringXleftOrigin + gridWidth,
-                    ringYtop + gridHeight,
-                    ringXrightOrigin + gridWidth,
-                    ringYbottom + gridHeight
-                )
 
-            # new envelope for next poly
-            ringYtop -= gridHeight
-            ringYbottom -= gridHeight
+def store_nc(data, dataset_name, target_nc="var/data/cache/cache.nc"):
+    with h5py.File(target_nc, "w", libver='latest') as h5_file:
+        dataset = h5_file.create_dataset(
+            dataset_name,
+            data.shape,
+            dtype=data.dtype)
+        dataset[...] = data
 
-        # new envelope for next poly
-        ringXleftOrigin += gridWidth
-        ringXrightOrigin += gridWidth
+
+def cache_nc(source_data_function, target_nc, dataset_name=None,
+             decode=None, *source_data_function_args,
+             **source_data_function_kwargs
+             ):
+    dataset_name = dataset_name or os.path.basename(target_nc).strip('.nc')
+    if not os.path.exists(target_nc):
+        mkdirs(target_nc)
+        data = source_data_function(
+            *source_data_function_args,
+             **source_data_function_kwargs
+        )
+        store_nc(data, dataset_name, target_nc)
+    with h5py.File(target_nc, "r", libver='latest') as target:
+        return target[dataset_name][()]
 
 
 def parse_filepath(minx, miny, filename_base="dino"):
