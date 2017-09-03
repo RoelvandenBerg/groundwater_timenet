@@ -26,15 +26,15 @@ def mkdirs(path):
         pass
 
 
-def setup_logging(name, filename, loglevel=logging.DEBUG):
+def setup_logging(name, filename, level="DEBUG"):
     mkdirs(filename)
-    logging.basicConfig(filename=filename, level=loglevel)
+    logging.basicConfig(
+        filename=filename,
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     logger = logging.getLogger(name)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    ch.setFormatter(formatter)
+    ch.setLevel(level)
     logger.addHandler(ch)
     return logger
 

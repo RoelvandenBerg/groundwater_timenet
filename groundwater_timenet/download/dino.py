@@ -1,4 +1,3 @@
-import logging
 import os
 from tempfile import NamedTemporaryFile
 from time import sleep
@@ -17,7 +16,7 @@ except ImportError:
     from .. import utils
 
 
-logger = utils.setup_logging(__name__, utils.HARVEST_LOG, logging.INFO)
+logger = utils.setup_logging(__name__, utils.HARVEST_LOG, "INFO")
 
 
 WFS_URL = 'http://www.broinspireservices.nl/wfs/osgegmw-a-v1.0'

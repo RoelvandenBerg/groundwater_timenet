@@ -1,4 +1,3 @@
-import logging
 import os
 
 try:
@@ -9,7 +8,7 @@ except ImportError:
     from ..download import knmi as download
 
 
-logger = utils.setup_logging(__name__, utils.PARSE_LOG, logging.INFO)
+logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
 
 
 def int_or_none(x):

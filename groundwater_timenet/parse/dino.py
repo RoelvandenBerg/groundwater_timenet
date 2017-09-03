@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 
@@ -13,7 +12,7 @@ except ImportError:
     from ..download import dino as download
 
 
-logger = utils.setup_logging(__name__, utils.PARSE_LOG, logging.INFO)
+logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
 
 
 def list_metadata(shuffled=False):

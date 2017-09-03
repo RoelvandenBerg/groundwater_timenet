@@ -162,34 +162,6 @@ def get_raster_filenames(rootdir):
     return np.array([f.encode('utf8') for f in files])
 
 
-def rain_timeseries(x, y, files):
-    for filepath in files:
-        h5file = h5py.File(filepath, 'r', libver='latest')
-        dataset = h5file.get('image1/image_data')
-        try:
-            value = dataset[x,y]
-        except:
-            logger.exception(
-                'file %s does not have dataset image1/image_data', filepath)
-            yield np.NaN
-        if value == RAIN_NAN_VALUE:
-            yield np.NaN
-        else:
-            yield value
-
-
-def rain_timeseries_dataset(
-        minx, miny, maxx, maxy, files, points=None, top_left=None):
-    # this should return a 10x10 matrix for the 10.000 m gridcell
-    print('creating rain_timeseries')
-    return np.array([
-        [
-            list(rain_timeseries(x, y, files))
-            for y in range(miny, maxy)
-        ] for x in range(minx, maxx)
-    ]), None
-
-
 def points_array(example_file):
     h5file = h5py.File(example_file, 'r', libver='latest')
     lat = h5file.get('lat')
@@ -204,49 +176,57 @@ def points_array(example_file):
     ])
 
 
-def find_top_left(top_left, points, minx, miny, maxx, maxy):
-    x, y = top_left
+def find_bbox(xmin, ymax, points, minx, miny, maxx, maxy):
     # each gridcell is 10x10, but we have to find the start first:
-    step = 1 if x == 0 and y == 349 else 10
-    for y in range(y, -1, step * -1):
-        for x in range(x, 300, step):
-            if utils.within(points[x][y], minx, miny, maxx, maxy):
-                print("\nfound %d, %d" % (x, y))
-                return x, y
-        x = 0
-    print('\nLast point: %d, %d' % (x, y))
-    return x, y
+    break_ = False
+    for ymax in range(ymax, -1, -1):
+        for xmin in range(xmin, 300):
+            if utils.within(points[xmin][ymax], minx, miny, maxx, maxy):
+                logger.debug("\nfound ymax %d, xmin %d" % (ymax, xmin))
+                break_ = True
+                break
+        if break_:
+            break
+        xmin = 0
+
+    break_ = False
+    xmax, ymin = xmax_start, _ = min(xmin + 10, 299), max(0, ymax - 10)
+    for ymin in range(ymin, ymax + 1):
+        for xmax in range(xmax, xmin - 1, -1):
+            if utils.within(points[xmax][ymin], minx, miny, maxx, maxy):
+                logger.debug("\nfound xmax %d, ymin %d" % (xmax, ymin))
+                break_ = True
+                break
+        if break_:
+            break
+        xmax = xmax_start
+    return xmin, ymin, xmax, ymax
 
 
-def get_h5_value(x, y, filepath):
+def get_h5_value(minx, miny, maxx, maxy, filepath, dataset_name, z=None):
     with h5py.File(filepath, 'r', libver='latest') as h5file:
-        dataset = h5file.get('prediction')
-        return dataset[0, max(0, y - 10):y, x:min(x + 10, 299)][()]
+        dataset = h5file.get(dataset_name)
+        if z is None:
+            return dataset[miny:maxy, minx:maxx][()]
+        else:
+            return dataset[z, miny:maxy, minx:maxx][()]
 
 
-def et_timeseries(x, y, files):
-    timeseries = np.array([get_h5_value(x, y, filepath) for filepath in files])
-    return np.moveaxis(timeseries, 0, -1)
+def timeseries(minx, miny, maxx, maxy, files, dataset_name, z=None):
+    timeseries_ = np.array([
+        get_h5_value(minx, miny, maxx, maxy, filepath, dataset_name, z)
+        for filepath in files])
+    return np.moveaxis(timeseries_, 0, -1)
 
 
-def et_timeseries_dataset(
-        minx, miny, maxx, maxy, files, points, top_left):
-    x, y = find_top_left(top_left, points, minx, miny, maxx, maxy)
-    return et_timeseries(x, y, files), (x, y)
-
-
-def add_timeseries_data(minx, miny, maxx, maxy, files,
-                        timeseries_dataset_method, h5_file, dataset_name,
-                        points, top_left=None):
-    print(top_left)
-    data, top_left = timeseries_dataset_method(
-        minx, miny, maxx, maxy, files, points, top_left)
+def add_timeseries_data(minx, miny, maxx, maxy, files, h5_file, target_dataset,
+                        source_dataset, z=None):
+    data = timeseries(minx, miny, maxx, maxy, files, source_dataset, z)
     dataset = h5_file.create_dataset(
-        dataset_name,
+        target_dataset,
         data.shape,
         dtype=data.dtype)
     dataset[...] = data
-    return top_left
 
 
 def apply_transform(x, y, coord_transform,
@@ -281,7 +261,7 @@ def reshape_rasters(rain_root='rain', et_root='et'):
     rain_root = 'rain'; et_root = 'et'
     rain_files = raster_filenames(root=rain_root)
     et_files = raster_filenames(root=et_root)
-    et_points = points_list(et_files[0])
+    et_points = points_list(et_files[6])
 
     rain_proj = osr.SpatialReference(osr.GetUserInputAsWKT(
         '+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 +a=6378.14 +b=6356.75 '
@@ -289,25 +269,26 @@ def reshape_rasters(rain_root='rain', et_root='et'):
     rd_proj = osr.SpatialReference(osr.GetUserInputAsWKT('epsg:28992'))
     sliding_geom_window = utils.sliding_geom_window('NederlandRegion.json')
     coord_transform = osr.CoordinateTransformation(rd_proj, rain_proj)
-    top_left = (0, 349)
+    et_minx, et_maxy = (0, 349)
     for minx, miny, maxx, maxy in sliding_geom_window:
         filepath = utils.parse_filepath(
             int(minx), int(miny), filename_base=FILENAME_BASE)
         h5_file = h5py.File(filepath, "w", libver='latest')
+        et_minx, et_miny, et_maxx, et_maxy = find_bbox(
+            et_minx, et_maxy, et_points, minx, miny, maxx, maxy)
+        add_timeseries_data(
+            et_minx, et_miny, et_maxx, et_maxy,
+            et_files, h5_file, et_root, 'prediction', 0)
+        logger.debug("et minx: %d maxy: %d ", et_minx, et_maxy)
         rain_minx, rain_miny = apply_transform(minx, miny, coord_transform)
         rain_maxx, rain_maxy = apply_transform(maxx, maxy, coord_transform)
         add_timeseries_data(
-            rain_minx, rain_miny, rain_maxx, rain_maxy, rain_files,
-            rain_timeseries_dataset, h5_file, rain_root, None
+            rain_minx, rain_maxy, rain_maxx, rain_miny, rain_files, h5_file,
+            rain_root, 'image1/image_data'
         )
-        top_left = add_timeseries_data(
-            minx, miny, maxx, maxy, et_files, et_timeseries_dataset,
-            h5_file, et_root, et_points, top_left
-        )
-        logger.debug(top_left)
         logger.debug(
             "Added rain and et data for minx %d, miny %d, maxx %d, maxy %d. "
-            "ET top left: %d %d", minx, miny, maxx, maxy, *top_left)
+            "ET top left: %d %d", minx, miny, maxx, maxy, et_minx, et_maxy)
 
 
 if __name__ == '__main__':
