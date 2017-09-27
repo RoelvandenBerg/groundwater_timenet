@@ -93,7 +93,7 @@ def load_station_data(nitg_nr):
     while len(periods) > 0:
         start_year, end_year = periods.pop()
         try:
-            meetreeksen = meetreeksen + list(
+            meetreeksen += list(
                 soap_client.service.findMeetreeks(
                     WELL_NITG_NR=nitg_nr,
                     START_DATE=str(start_year) + '-01-01',
@@ -121,11 +121,13 @@ def load_station_data(nitg_nr):
 
 
 def load_dino_grid_cell(features):
-    for (well, x, y, start, end,
-         (top_depth_mv_up, top_depth_mv_down),
-         (bottom_depth_mv_up, bottom_depth_mv_down),
-         (top_height_up, top_height_down),
-         (bottom_height_up, bottom_height_down)) in features:
+    for (
+        well, x, y, start, end,
+        (top_depth_mv_up, top_depth_mv_down),
+        (bottom_depth_mv_up, bottom_depth_mv_down),
+        (top_height_up, top_height_down),
+        (bottom_height_up, bottom_height_down)
+    ) in features:
         try:
             data = load_station_data(well)
             for well_nr, tube_nr, well_data in data:
@@ -163,7 +165,7 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
             ]
             if len(data_) == 0:
                 logger.info("Well %s %s doesn't contain data",
-                             metadata[0], metadata[1])
+                            metadata[0], metadata[1])
                 continue
             data = np.array(data_)
             logger.info(
@@ -183,11 +185,11 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
                     maxshape=(None, 2),
                     dtype='f4')
                 logger.warn("%s %s ALREADY EXISTS! Deleted.",
-                             metadata[0], str(metadata[1]))
+                            metadata[0], str(metadata[1]))
             if dataset.shape != data.shape:
                 dataset.resize(data.shape)
                 logger.warn("%s %s HAS WRONG SHAPE! Resized.",
-                         metadata[0], str(metadata[1]))
+                            metadata[0], str(metadata[1]))
             dataset[...] = data
             meta_data.append([str(x) for x in metadata])
             changed = True
@@ -205,8 +207,8 @@ def download_hdf5(skip=0, filename_base=FILENAME_BASE):
             count = len(meta_data)
             total_count += count
             logger.info(
-                'Downloaded %d wells to %s. Total count: %d, next time, skip %d '
-                'valid grid cells.', count, filepath, total_count, skip
+                'Downloaded %d wells to %s. Total count: %d, next time, skip '
+                '%d valid grid cells.', count, filepath, total_count, skip
             )
         if not changed:
             os.remove(filepath)

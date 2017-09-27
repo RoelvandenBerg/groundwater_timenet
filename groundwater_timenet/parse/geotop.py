@@ -9,7 +9,7 @@ except ImportError:
 
 logger = utils.setup_logging(__name__, utils.PARSE_LOG)
 
-RELEVANT_VARIABLES = [
+RELEVANT_VARIABLES = (
     'strat',
     'lithok',
     'kans_1',
@@ -23,7 +23,7 @@ RELEVANT_VARIABLES = [
     'kans_9',
     'onz_lk',
     'onz_ls'
-]
+)
 
 
 def geotop_handler(filename='geotop.nc'):

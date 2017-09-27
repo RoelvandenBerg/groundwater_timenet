@@ -22,8 +22,8 @@ class WeatherStations(object):
     HEADER = (
         '# STN,YYYYMMDD,DDVEC,FHVEC,   FG,  FHX, FHXH,  FHN, FHNH,  FXX, '
         'FXXH,   TG,   TN,  TNH,   TX,  TXH, T10N,T10NH,   SQ,   SP,    Q,   '
-        'DR,   RH,  RHX, RHXH,   PG,   PX,  PXH,   PN,  PNH,  VVN, VVNH,  VVX, '
-        'VVXH,   NG,   UG,   UX,  UXH,   UN,  UNH, EV24\n'
+        'DR,   RH,  RHX, RHXH,   PG,   PX,  PXH,   PN,  PNH,  VVN, VVNH,  '
+        'VVX, VVXH,   NG,   UG,   UX,  UXH,   UN,  UNH, EV24\n'
     )
 
     # All uncommented stations contain both rain and evaporation
@@ -125,7 +125,9 @@ class WeatherStations(object):
 #                                                     for line in dataset)]
 #     for dataset in COLLECTED_DATA
 # ]
-# evap = [l[0] for l in dataset_contents if any(xx in l for xx in EVAP_HEADERS)]
-# rain = [l[0] for l in dataset_contents if any(xx in l for xx in RAIN_HEADERS)]
+# evap = [
+#     l[0] for l in dataset_contents if any(xx in l for xx in EVAP_HEADERS)]
+# rain = [
+#     l[0] for l in dataset_contents if any(xx in l for xx in RAIN_HEADERS)]
 # # make sure both are equal:
 # all(xx == evap[i] for i, xx in rain)

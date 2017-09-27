@@ -20,14 +20,23 @@ levels.
 - [X] KNMI evapotranspiration
 - [ ] soil data
 - [ ] other relevant data
+##### data exploration:
+- [X] geohydrology data (GEOTOP data)
+- [ ] DINO groundwater levels
+- [X] KNMI rain (use grids)
+- [X] KNMI evapotranspiration (use grids)
+- [ ] soil data
+- [ ] other relevant data
+##### other improvements
+- [X] cache data in hdf5 files for faster performance
+- [ ] normalize data based on data exploration
+- [ ] make sure temporal dimensions match
+- [ ] create one cached file with all normalized data
 ##### build a neural network with Keras / Tensorflow:
 - [ ] Wavenet atrous CNN architecture
 - [ ] LTSM architecture
 - [ ] combine / try out different combinations
 - [ ] reiterate...
-##### other improvements
-- [ ] make sure temporal dimensions match
-- [ ] cache data in hdf5 files for faster performance
 
 ## Data Sources
 ### Projection
@@ -198,5 +207,5 @@ The Soil physical unit map ([Bodemfysische-Eenhedenkaart](http://www.wur.nl/nl/s
 
 ### Other
 #### Deltares:
-- [Irrigation](https://data.overheid.nl/data/dataset/irrigatiewater-locatie-beregeningsonttrekkingen-uit-grondwater-en-oppervlaktewater/resource/536fd1e6-5f2e-4392-bff8-e06677ecb0cd)
+- [Irrigation](https://data.overheid.nl/data/dataset/irrigatiewater-locatie-beregeningsonttrekkingen-uit-grondwater-en-oppervlaktewater)
 - [Drinking water](https://data.overheid.nl/data/dataset/drinkwater)

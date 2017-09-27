@@ -6,10 +6,10 @@ import logging
 import os
 from math import ceil
 
-import numpy as np
-import h5py
 from osgeo import ogr
 from osgeo import osr
+import h5py
+import numpy as np
 
 
 PARSE_LOG = 'var/log/parse.log'
@@ -66,7 +66,7 @@ def closest_point(point, multipoint):
         [(mp.Distance(point), i) for i, mp in enumerate(multipoint)])[0][1]
 
 
-def within(geom, minx, miny, maxx, maxy):
+def bbox2polygon(minx, miny, maxx, maxy):
     ring = ogr.Geometry(ogr.wkbLinearRing)
     ring.AddPoint(minx, miny)
     ring.AddPoint(maxx, miny)
@@ -75,7 +75,11 @@ def within(geom, minx, miny, maxx, maxy):
     ring.AddPoint(minx, miny)
     poly = ogr.Geometry(ogr.wkbPolygon)
     poly.AddGeometry(ring)
+    return poly
 
+
+def within(geom, minx, miny, maxx, maxy):
+    poly = bbox2polygon(minx, miny, maxx, maxy)
     # TODO: Fix this, within seems to be within the envelope, which is
     # useless for our case since the grid is based on the envelope.
     return poly.Within(geom) or poly.Intersects(geom)
@@ -94,8 +98,8 @@ def create_sliding_geom_window(
         source json
     """
     source_json = 'NederlandRegion.json'
-    gridHeight=10000
-    gridWidth=10000
+    gridHeight = 10000
+    gridWidth = 10000
     driver = ogr.GetDriverByName('GeoJSON')
     data_source = driver.Open(source_json, 0)
     if data_source is None:
@@ -161,7 +165,7 @@ def cache_nc(source_data_function, target_nc, dataset_name=None,
         mkdirs(target_nc)
         data = source_data_function(
             *source_data_function_args,
-             **source_data_function_kwargs
+            **source_data_function_kwargs
         )
         store_nc(data, dataset_name, target_nc)
     with h5py.File(target_nc, "r", libver='latest') as target:
@@ -174,3 +178,8 @@ def parse_filepath(minx, miny, filename_base="dino"):
     )
     mkdirs(filepath)
     return filepath
+
+
+def get_h5_data(filepath, dataset_name):
+    with h5py.File(filepath, 'r', libver='latest') as h5file:
+        return h5file.get(dataset_name)[:]

@@ -154,7 +154,11 @@ def try_h5(f):
 
 def get_raster_filenames(rootdir):
     files = sorted(
-        [os.path.join(r, f[0]) for r, d, f in os.walk('var/data/' + rootdir) if f])
+        [
+            os.path.join(r, f[0]) for r, d, f in os.walk('var/data/' + rootdir)
+            if f
+        ]
+    )
     faulty = [x for x in [try_h5(f) for f in files] if x]
     if faulty:
         raise OSError(
@@ -204,12 +208,11 @@ def find_bbox(xmin, ymax, points, minx, miny, maxx, maxy):
 
 
 def get_h5_value(minx, miny, maxx, maxy, filepath, dataset_name, z=None):
-    with h5py.File(filepath, 'r', libver='latest') as h5file:
-        dataset = h5file.get(dataset_name)
-        if z is None:
-            return dataset[miny:maxy, minx:maxx][()]
-        else:
-            return dataset[z, miny:maxy, minx:maxx][()]
+    dataset = utils.get_h5_data(filepath, dataset_name)
+    if z is None:
+        return dataset[miny:maxy, minx:maxx][()]
+    else:
+        return dataset[z, miny:maxy, minx:maxx][()]
 
 
 def timeseries(minx, miny, maxx, maxy, files, dataset_name, z=None):
@@ -230,9 +233,9 @@ def add_timeseries_data(minx, miny, maxx, maxy, files, h5_file, target_dataset,
 
 
 def apply_transform(x, y, coord_transform,
-                    asine=(0.0, 1.0, 0, -3649.98, 0, -1.0)):
+                    affine=(0.0, 1.0, 0, -3649.98, 0, -1.0)):
     return [round(f) for f in gdal.ApplyGeoTransform(
-        asine, *coord_transform.TransformPoint(x, y)[:2])]
+        affine, *coord_transform.TransformPoint(x, y)[:2])]
 
 
 def raster_filenames(root, source_netcdf=None):
@@ -258,7 +261,8 @@ def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
 
 
 def reshape_rasters(rain_root='rain', et_root='et'):
-    rain_root = 'rain'; et_root = 'et'
+    rain_root = 'rain'
+    et_root = 'et'
     rain_files = raster_filenames(root=rain_root)
     et_files = raster_filenames(root=et_root)
     et_points = points_list(et_files[6])
@@ -302,8 +306,8 @@ if __name__ == '__main__':
     load_knmi_measurement_data()
 
 
-# # in case you used the grab_..._grids methods, you need to put the daily files
-# # each in its own directory, this is for the et-grids:
+# # in case you used the grab_..._grids methods, you need to put the daily
+# # files each in its own directory, this is for the et-grids:
 # def digitify(digit):
 #     return '0' * (2 - len(str(digit))) + str(digit)
 #
