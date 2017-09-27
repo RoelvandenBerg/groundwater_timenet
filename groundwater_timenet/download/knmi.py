@@ -4,6 +4,10 @@ import io
 import os
 import zipfile
 
+import osr
+import gdal
+import h5py
+import numpy as np
 import requests
 
 try:
@@ -14,15 +18,33 @@ except ImportError:
 
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)
 
+FILENAME_BASE = "knmi"
+RAIN_NAN_VALUE = 65535
+ET_NAN_VALUE = -9999.0
+
 STATION_URL = ("https://cdn.knmi.nl/knmi/map/page/klimatologie/gegevens/"
                "daggegevens/etmgeg_{code}.zip")
+
 STATION_CODES = [
-    '209', '210', '215', '225', '235', '240', '242', '248', '249', '251',
-    '257', '258', '260', '265', '267', '269', '270', '273', '275', '277',
-    '278', '279', '280', '283', '285', '286', '290', '308', '310', '311',
-    '312', '313', '315', '316', '319', '323', '324', '330', '331', '340',
-    '343', '344', '348', '350', '356', '370', '375', '377', '380', '391'
+    '210', '215', '235', '240', '249', '251', '257', '260', '265', '267',
+    '269', '270', '273', '275', '277', '278', '279', '280', '283', '286',
+    '290', '310', '319', '323', '330', '344', '348', '350', '356', '370',
+    '375', '377', '380', '391'
 ]
+
+
+def download_measurementstation_metadata():
+    """
+    Downloads a file with in the header
+    :return:
+    """
+    data = {'stns': "ALL"}
+    url = "http://projects.knmi.nl/klimatologie/monv/reeksen/getdata_rr.cgi"
+    response = requests.post(url=url, data=data)
+    with open('var/data/knmi_measurementstations/knmi_metadata.txt', 'w'
+              ) as f:
+        f.write(response.text)
+
 
 def grab_daily_ftp(target_dir, source_base, filename_parser, start, end=None,
                    ftp_base='data.knmi.nl'):
@@ -123,7 +145,181 @@ def load_knmi_measurement_data(target_dir='var/data/knmi_measurementstations'):
         logger.debug("Collected measurement data for station %s", code)
 
 
+def try_h5(f):
+    try:
+        h5py.File(f, 'r')
+    except OSError:
+        return f
+
+
+def get_raster_filenames(rootdir):
+    files = sorted(
+        [
+            os.path.join(r, f[0]) for r, d, f in os.walk('var/data/' + rootdir)
+            if f
+        ]
+    )
+    faulty = [x for x in [try_h5(f) for f in files] if x]
+    if faulty:
+        raise OSError(
+            'Broken HDF5 files found:\n- {}'.format('\n- '.join(faulty)))
+    return np.array([f.encode('utf8') for f in files])
+
+
+def points_array(example_file):
+    h5file = h5py.File(example_file, 'r', libver='latest')
+    lat = h5file.get('lat')
+    lon = h5file.get('lon')
+    return np.array([
+        [
+            p.GetPoint() for p in (
+                utils.point(float(lon[x, y]), float(lat[x, y])) for x in
+                range(350)
+            ) if not utils.transform(p)
+        ] for y in range(300)
+    ])
+
+
+def find_bbox(xmin, ymax, points, minx, miny, maxx, maxy):
+    # each gridcell is 10x10, but we have to find the start first:
+    break_ = False
+    for ymax in range(ymax, -1, -1):
+        for xmin in range(xmin, 300):
+            if utils.within(points[xmin][ymax], minx, miny, maxx, maxy):
+                logger.debug("\nfound ymax %d, xmin %d" % (ymax, xmin))
+                break_ = True
+                break
+        if break_:
+            break
+        xmin = 0
+
+    break_ = False
+    xmax, ymin = xmax_start, _ = min(xmin + 10, 299), max(0, ymax - 10)
+    for ymin in range(ymin, ymax + 1):
+        for xmax in range(xmax, xmin - 1, -1):
+            if utils.within(points[xmax][ymin], minx, miny, maxx, maxy):
+                logger.debug("\nfound xmax %d, ymin %d" % (xmax, ymin))
+                break_ = True
+                break
+        if break_:
+            break
+        xmax = xmax_start
+    return xmin, ymin, xmax, ymax
+
+
+def get_h5_value(minx, miny, maxx, maxy, filepath, dataset_name, z=None):
+    dataset = utils.get_h5_data(filepath, dataset_name)
+    if z is None:
+        return dataset[miny:maxy, minx:maxx][()]
+    else:
+        return dataset[z, miny:maxy, minx:maxx][()]
+
+
+def timeseries(minx, miny, maxx, maxy, files, dataset_name, z=None):
+    timeseries_ = np.array([
+        get_h5_value(minx, miny, maxx, maxy, filepath, dataset_name, z)
+        for filepath in files])
+    return np.moveaxis(timeseries_, 0, -1)
+
+
+def add_timeseries_data(minx, miny, maxx, maxy, files, h5_file, target_dataset,
+                        source_dataset, z=None):
+    data = timeseries(minx, miny, maxx, maxy, files, source_dataset, z)
+    dataset = h5_file.create_dataset(
+        target_dataset,
+        data.shape,
+        dtype=data.dtype)
+    dataset[...] = data
+
+
+def apply_transform(x, y, coord_transform,
+                    affine=(0.0, 1.0, 0, -3649.98, 0, -1.0)):
+    return [round(f) for f in gdal.ApplyGeoTransform(
+        affine, *coord_transform.TransformPoint(x, y)[:2])]
+
+
+def raster_filenames(root, source_netcdf=None):
+    source_netcdf = source_netcdf or "var/data/cache/{}files.nc".format(root)
+    filenames = utils.cache_nc(
+        get_raster_filenames, source_netcdf,
+        dataset_name=root,
+        rootdir=root,
+    )
+    return [f.decode('utf8') for f in filenames]
+
+
+def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
+    array = utils.cache_nc(
+        points_array, source_netcdf,
+        example_file=ex_et_file,
+    )
+    points = (
+        ((float(x), float(y)) for x, y, _ in array_row) for array_row in array)
+    return [
+        [utils.point(*point) for point in points_row] for points_row in points
+    ]
+
+
+def reshape_rasters(rain_root='rain', et_root='et'):
+    rain_root = 'rain'
+    et_root = 'et'
+    rain_files = raster_filenames(root=rain_root)
+    et_files = raster_filenames(root=et_root)
+    et_points = points_list(et_files[6])
+
+    rain_proj = osr.SpatialReference(osr.GetUserInputAsWKT(
+        '+proj=stere +lat_0=90 +lon_0=0 +lat_ts=60 +a=6378.14 +b=6356.75 '
+        '+x_0=0 y_0=0'))
+    rd_proj = osr.SpatialReference(osr.GetUserInputAsWKT('epsg:28992'))
+    sliding_geom_window = utils.sliding_geom_window('NederlandRegion.json')
+    coord_transform = osr.CoordinateTransformation(rd_proj, rain_proj)
+    et_minx, et_maxy = (0, 349)
+    for minx, miny, maxx, maxy in sliding_geom_window:
+        filepath = utils.parse_filepath(
+            int(minx), int(miny), filename_base=FILENAME_BASE)
+        h5_file = h5py.File(filepath, "w", libver='latest')
+        et_minx, et_miny, et_maxx, et_maxy = find_bbox(
+            et_minx, et_maxy, et_points, minx, miny, maxx, maxy)
+        add_timeseries_data(
+            et_minx, et_miny, et_maxx, et_maxy,
+            et_files, h5_file, et_root, 'prediction', 0)
+        logger.debug("et minx: %d maxy: %d ", et_minx, et_maxy)
+        rain_minx, rain_miny = apply_transform(minx, miny, coord_transform)
+        rain_maxx, rain_maxy = apply_transform(maxx, maxy, coord_transform)
+        add_timeseries_data(
+            rain_minx, rain_maxy, rain_maxx, rain_miny, rain_files, h5_file,
+            rain_root, 'image1/image_data'
+        )
+        logger.debug(
+            "Added rain and et data for minx %d, miny %d, maxx %d, maxy %d. "
+            "ET top left: %d %d", minx, miny, maxx, maxy, et_minx, et_maxy)
+
+
 if __name__ == '__main__':
-    grab_evap_grids()
-    grab_rain_grids()
+    logger.info('These grids can more easily be downloaded from this '
+                'location for rain: '
+                'https://data.knmi.nl/datasets/radar_corr_accum_24h/1.0 '
+                'and this location for evaporation:'
+                'https://data.knmi.nl/datasets/EV24/2')
+    # grab_evap_grids()
+    # grab_rain_grids()
     load_knmi_measurement_data()
+
+
+# # in case you used the grab_..._grids methods, you need to put the daily
+# # files each in its own directory, this is for the et-grids:
+# def digitify(digit):
+#     return '0' * (2 - len(str(digit))) + str(digit)
+#
+#
+# for year in range(1965, 2018):
+#      for month in range(1, 13):
+#          month_root = os.path.join(root, str(year), digitify(month))
+#          files = os.listdir(month_root)
+#          for i, daydir in enumerate(range(1, len(files) + 1)):
+#              new_dir_path = os.path.join(month_root, digitify(daydir))
+#              os.makedirs(new_dir_path)
+#              filepath = os.path.join(month_root, files[i])
+#              new_filepath = os.path.join(new_dir_path, files[i])
+#              os.rename(filepath, new_filepath)
+#              print('moved', filepath, 'to', new_filepath)

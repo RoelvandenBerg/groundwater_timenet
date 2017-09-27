@@ -13,10 +13,12 @@ long_description = '\n\n'.join([
 
 install_requires = [
     'h5py',
+    'ipython',
     'keras',
     'netCDF4',
     'numpy',
     'osgeo',
+    'owslib',
     'pandas',
     'requests',
     'suds-py3',

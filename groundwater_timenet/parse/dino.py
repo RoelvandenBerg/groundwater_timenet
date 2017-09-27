@@ -1,4 +1,3 @@
-import logging
 import os
 import random
 
@@ -13,7 +12,7 @@ except ImportError:
     from ..download import dino as download
 
 
-logger = utils.setup_logging(__name__, utils.PARSE_LOG, logging.INFO)
+logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
 
 
 def list_metadata(shuffled=False):
@@ -28,7 +27,10 @@ def list_metadata(shuffled=False):
         for filepath in hdf5_files:
             h5_file = h5py.File(filepath, "r")
             metadata = h5_file.get("metadata", [])
-            new_meta = {(filepath, tuple(x)) for x in metadata}
+            new_meta = {
+                (filepath, tuple(d.decode('utf-8') for d in x))
+                for x in metadata
+            }
             total = total.union(new_meta)
             length = len(new_meta)
             if length == 0:
@@ -61,8 +63,11 @@ def random_stations(from_pct=0, to_pct=100):
     for filepath, metadata_binary in all_data[from_:to_]:
         h5_file = h5py.File(filepath, "r")
         metadata_raw = [x.decode('utf8') for x in metadata_binary]
-        metadata = metadata_raw[:2] + [int(x) for x in metadata_raw[2:4]] + \
-                   metadata_raw[4:6] + [try_float(x, metadata_raw) for x in metadata_raw[6:]]
+        metadata = (
+            metadata_raw[:2] + [int(x) for x in metadata_raw[2:4]] +
+            metadata_raw[4:6] + [try_float(x, metadata_raw)
+                                 for x in metadata_raw[6:]]
+        )
         data = h5_file.get(metadata[0] + metadata[1], [])
         yield metadata, data
 
