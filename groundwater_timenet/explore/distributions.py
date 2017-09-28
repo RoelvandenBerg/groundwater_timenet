@@ -12,6 +12,7 @@ import os
 
 from matplotlib import pyplot
 from netCDF4 import Dataset
+import h5py
 import numpy as np
 
 from groundwater_timenet import utils
@@ -22,9 +23,13 @@ from abc import abstractproperty, abstractmethod, ABCMeta
 
 class Counts(dict, metaclass=ABCMeta):
 
-    def __init__(self, cache_json=False):
+    def __init__(self, cache_json=False, use_cache=True, count=False):
         self._cache = cache_json
-        self.count()
+        if use_cache and os.path.exists(self.json_filepath):
+            with open(self.json_filepath, 'r') as json_file:
+                self.update(json.loads(json_file.read()))
+        if count:
+            self.count()
 
     @abstractmethod
     def dataset_generator(self, key):
@@ -56,7 +61,7 @@ class Counts(dict, metaclass=ABCMeta):
             unique_counts[k] = unique_counts.get(k, 0) + v
         return unique_counts
 
-    def count(self, use_cache=True):
+    def count(self):
         """
         We count all values for the relevant datasets. And store them in a
         json.
@@ -64,15 +69,11 @@ class Counts(dict, metaclass=ABCMeta):
         Returns:
             dictionary of dataset counts.
         """
-        if use_cache and os.path.exists(self.json_filepath):
-            with open(self.json_filepath, 'r') as json_file:
-                self.update(json.loads(json_file.read()))
-        else:
-            self.update({
-                name: self._unique_counts(name) for name in self.dataset_names
-            })
-            if self._cache:
-                self.cache()
+        self.update({
+            name: self._unique_counts(name) for name in self.dataset_names
+        })
+        if self._cache:
+            self.cache()
 
     def cache(self):
         """
@@ -80,28 +81,38 @@ class Counts(dict, metaclass=ABCMeta):
         """
         # somehow the generated dictionary is not correct
         strfied = "{\n    " + ",\n    ".join(
-            ['"' + k + '": ' + str(v).replace("'", '"') for k, v in
+            ['"' + str(k) + '": ' + str(v).replace("'", '"') for k, v in
              self.items()]) + "\n}"
         with open(self.json_filepath, 'w') as f:
             f.write(strfied)
 
 
 class Plots(Counts, metaclass=ABCMeta):
+    @abstractproperty
+    def png_base(self):
+        pass
 
     @abstractmethod
     def plot(self):
         pass
 
-    @staticmethod
-    def _count_plot(x_axis, data, legend=None, xlabel=None, method='plot'):
+    def _count_plot(
+            self, x_axis, data, legend=None, xlabel=None, method='plot'):
+        pyplot.cla()
         for data_set in data:
             getattr(pyplot, method)(x_axis, data_set)
-        if legend is not None:
-            pyplot.legend(legend)
         if xlabel is not None:
             pyplot.xlabel(xlabel)
+            filename = xlabel
+        if legend is not None:
+            pyplot.legend(legend)
+            filename = legend[0]
+        filepath = os.path.join(
+            'exploration', 'images', self.png_base + '_' + filename + '.png')
         pyplot.ylabel('count')
-        pyplot.show()
+        fig = pyplot.gcf()
+        fig.set_size_inches(18.5, 10.5)
+        fig.savefig(filepath, dpi=100)
 
     def _create_data(self, classes, headers):
         sorted_classes = sorted(classes)
@@ -109,8 +120,8 @@ class Plots(Counts, metaclass=ABCMeta):
             [self[h].get(str(c), 0) for c in sorted_classes] for h in headers
         ]
 
-    def percent_plot(self, headers, start=1, xlabel='percent'):
-        x_axis = list(range(start, 100))
+    def percent_plot(self, headers, start=1, end=100, xlabel='percent'):
+        x_axis = list(range(start, end))
         data = self._create_data(x_axis, headers)
         self._count_plot(x_axis, data, headers, xlabel)
 
@@ -121,6 +132,11 @@ class Plots(Counts, metaclass=ABCMeta):
             data=self._create_data(classes, (label,)),
             xlabel=label,
             method="bar")
+
+    def line_plot(self, keys):
+        end = max([int(k) for key in keys for k in self[key].keys()])
+        start = min([int(k) for key in keys for k in self[key].keys()])
+        self.percent_plot(keys, start=start, end=end, xlabel=keys[0])
 
 
 class Geotop(Plots):
@@ -135,6 +151,7 @@ class Geotop(Plots):
     """
     json_filename = "geotop.json"
     dataset_names = RELEVANT_VARIABLES
+    png_base = 'geotop'
 
     def __init__(self, *args, **kwargs):
         super(Geotop, self).__init__(*args, **kwargs)
@@ -170,11 +187,83 @@ class Knmi(Plots):
         'rain': raster_filenames(root='rain'),
     }
     fraction = {'et': 10, 'rain': 0.01}
+    png_base = 'knmi'
 
     def dataset_generator(self, key):
         for filepath in self.filenames[key]:
             yield (utils.get_h5_data(filepath, self.subdataset_name[key]) *
                    self.fraction[key]).astype('int')
 
-    def plot(self, key):
-        self.percent_plot((key, ), xlabel=key)
+    def plot(self):
+        for key in self.dataset_names:
+            if self[key]:
+                self.percent_plot((key, ), xlabel=key)
+
+
+class Dino(Plots):
+    """
+    Object with Dino counts.
+
+    Running this for the first time will take time.
+    When store_json is set to True and the file does not exist, it will save a
+    json with the counts to disk (exploration/distributions/geotop.json).
+
+    Has a plot method that shows a series of mapnik plots of the distributions.
+    """
+    json_filename = 'dino.json'
+    dataset_names = (
+        'groundwater',
+        'top_depth_mv_up', 'top_depth_mv_down',
+        'bottom_depth_mv_up', 'bottom_depth_mv_down',
+        'top_height_nap_up', 'top_height_nap_down',
+        'bottom_height_mv_up', 'bottom_height_mv_down'
+    )
+    dataset_indexes = {
+        'top_depth_mv_up': 6,
+        'top_depth_mv_down': 7,
+        'bottom_depth_mv_up': 8,
+        'bottom_depth_mv_down': 9,
+        'top_height_nap_up': 10,
+        'top_height_nap_down': 11,
+        'bottom_height_mv_up': 12,
+        'bottom_height_mv_down': 13
+    }
+    png_base = 'dino'
+
+    @property
+    def filenames(self):
+        return (
+            os.path.join(root, f) for root, dirs, files in
+            os.walk('var/data/dino') for f in files if f.endswith('hdf5')
+        )
+
+    def groundwater_generator(self):
+        for filepath in self.filenames:
+            with h5py.File(filepath, 'r', libver='latest') as h5file:
+                yield np.concatenate(
+                    [h5file[k][:, 1] for k in list(h5file) if k != "metadata"]
+                ).astype('int')
+
+    def metadata_generator(self, key):
+        k = self.dataset_indexes[key]
+        for filepath in self.filenames:
+            with h5py.File(filepath, 'r', libver='latest') as h5file:
+                metadata = h5file['metadata'][:, k]
+                yield metadata[metadata != b''].astype('float64').astype('int')
+
+    def dataset_generator(self, key):
+        if key == 'groundwater':
+            return self.groundwater_generator()
+        return self.metadata_generator(key)
+
+    def plot(self):
+        if self['groundwater']:
+            self.line_plot(('groundwater',))
+        if self['top_depth_mv_up']:
+            self.line_plot(('top_depth_mv_up', 'top_depth_mv_down',))
+        if self['bottom_depth_mv_up']:
+            self.line_plot(('bottom_depth_mv_up', 'bottom_depth_mv_down',))
+        if self['top_height_nap_up']:
+            self.line_plot(('top_height_nap_up', 'top_height_nap_down',))
+        if self['bottom_height_mv_up']:
+            self.line_plot(('bottom_height_mv_up', 'bottom_height_mv_down'))

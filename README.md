@@ -22,7 +22,7 @@ levels.
 - [ ] other relevant data
 ##### data exploration:
 - [X] geohydrology data (GEOTOP data)
-- [ ] DINO groundwater levels
+- [X] DINO groundwater levels
 - [X] KNMI rain (use grids)
 - [X] KNMI evapotranspiration (use grids)
 - [ ] soil data
