@@ -4,12 +4,9 @@ import random
 import h5py
 import numpy as np
 
-try:
-    from groundwater_timenet import utils
-    from groundwater_timenet.download import dino as download
-except ImportError:
-    from .. import utils
-    from ..download import dino as download
+from groundwater_timenet import utils
+from groundwater_timenet.download import dino as download
+from groundwater_timenet.parse.base import Data
 
 
 logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
@@ -76,3 +73,14 @@ def count():
     total = sum([y[1].shape[0] for y in random_stations()])
     logger.info("%d individual timesteps found", total)
     return total
+
+
+def filepaths():
+    return (
+        os.path.join(root, f) for root, dirs, files in
+        os.walk('var/data/dino') for f in files if f.endswith('hdf5')
+    )
+
+
+class DinoData(Data):
+    type = Data.DataType.BASE

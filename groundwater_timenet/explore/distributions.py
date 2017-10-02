@@ -16,8 +16,8 @@ import h5py
 import numpy as np
 
 from groundwater_timenet import utils
-from groundwater_timenet.parse.geotop import RELEVANT_VARIABLES
-from groundwater_timenet.download.knmi import raster_filenames
+from groundwater_timenet import parse
+from groundwater_timenet.parse.knmi import raster_filenames
 from abc import abstractproperty, abstractmethod, ABCMeta
 
 
@@ -150,7 +150,7 @@ class Geotop(Plots):
     Has a plot method that shows a series of mapnik plots of the distributions.
     """
     json_filename = "geotop.json"
-    dataset_names = RELEVANT_VARIABLES
+    dataset_names = parse.geotop.RELEVANT_VARIABLES
     png_base = 'geotop'
 
     def __init__(self, *args, **kwargs):
@@ -182,12 +182,15 @@ class Knmi(Plots):
     json_filename = 'knmi.json'
     dataset_names = ('et', 'rain')
     subdataset_name = {"et": 'prediction', 'rain': 'image1/image_data'}
-    filenames = {
-        'et': raster_filenames(root='et'),
-        'rain': raster_filenames(root='rain'),
-    }
     fraction = {'et': 10, 'rain': 0.01}
     png_base = 'knmi'
+
+    def __init__(self, *args, **kwargs):
+        super(Knmi, self).__init(*args, **kwargs)
+        self.filenames = {
+            'et': raster_filenames(root='et'),
+            'rain': raster_filenames(root='rain'),
+        }
 
     def dataset_generator(self, key):
         for filepath in self.filenames[key]:
@@ -231,14 +234,11 @@ class Dino(Plots):
     png_base = 'dino'
 
     @property
-    def filenames(self):
-        return (
-            os.path.join(root, f) for root, dirs, files in
-            os.walk('var/data/dino') for f in files if f.endswith('hdf5')
-        )
+    def filepaths(self):
+        return parse.dino.filepaths()
 
     def groundwater_generator(self):
-        for filepath in self.filenames:
+        for filepath in self.filepaths:
             with h5py.File(filepath, 'r', libver='latest') as h5file:
                 yield np.concatenate(
                     [h5file[k][:, 1] for k in list(h5file) if k != "metadata"]
@@ -246,7 +246,7 @@ class Dino(Plots):
 
     def metadata_generator(self, key):
         k = self.dataset_indexes[key]
-        for filepath in self.filenames:
+        for filepath in self.filepaths:
             with h5py.File(filepath, 'r', libver='latest') as h5file:
                 metadata = h5file['metadata'][:, k]
                 yield metadata[metadata != b''].astype('float64').astype('int')

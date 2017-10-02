@@ -6,14 +6,17 @@ intersect with the sliding window.
 import shutil
 
 from osgeo import ogr, osr, gdal
+import h5py
+import numpy as np
 
 from groundwater_timenet.utils import sliding_geom_window
 from groundwater_timenet.utils import mkdirs
 from groundwater_timenet.utils import bbox2polygon
 from groundwater_timenet.utils import point
+from groundwater_timenet.utils import cache_nc
 from groundwater_timenet.utils import transform
-from groundwater_timenet.download import knmi
 from groundwater_timenet.parse import dino
+from groundwater_timenet.parse import knmi
 
 
 def make_shape(filepath, fields, features, geometry_type, layername="data",
@@ -52,10 +55,36 @@ def sliding_window():
     make_shape(filepath, fields, features, geometry_type, layername)
 
 
+def points_array(example_file):
+    h5file = h5py.File(example_file, 'r', libver='latest')
+    lat = h5file.get('lat')
+    lon = h5file.get('lon')
+    return np.array([
+        [
+            p.GetPoint() for p in (
+                point(float(lon[x, y]), float(lat[x, y])) for x in
+                range(350)
+            ) if not transform(p)
+        ] for y in range(300)
+    ])
+
+
+def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
+    array = cache_nc(
+        points_array, source_netcdf,
+        example_file=ex_et_file,
+    )
+    points = (
+        ((float(x), float(y)) for x, y, _ in array_row) for array_row in array)
+    return [
+        [point(*pt) for pt in points_row] for points_row in points
+    ]
+
+
 def knmi_et_point_cloud():
     filepath = "var/data/shapes/knmi/et_pointcloud.shp"
     et_files = knmi.raster_filenames(root="et")
-    et_points = knmi.points_list(et_files[6])
+    et_points = points_list(et_files[6])
     features = ((j, None) for i in et_points for j in i)
     geometry_type = ogr.wkbPoint
     fields = ()

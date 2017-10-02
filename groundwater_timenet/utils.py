@@ -61,9 +61,10 @@ def multipoint(points):
     return mp
 
 
-def closest_point(point, multipoint):
+def closest_point(x, y, multipoint):
+    pt = point(x, y)
     return sorted(
-        [(mp.Distance(point), i) for i, mp in enumerate(multipoint)])[0][1]
+        [(mp.Distance(pt), i) for i, mp in enumerate(multipoint)])[0][1]
 
 
 def bbox2polygon(minx, miny, maxx, maxy):
@@ -156,20 +157,21 @@ def store_nc(data, dataset_name, target_nc="var/data/cache/cache.nc"):
         dataset[...] = data
 
 
-def cache_nc(source_data_function, target_nc, dataset_name=None,
+def cache_nc(source_data_function, target_nc, cache_dataset_name=None,
              decode=None, *source_data_function_args,
              **source_data_function_kwargs
              ):
-    dataset_name = dataset_name or os.path.basename(target_nc).strip('.nc')
+    cache_dataset_name = cache_dataset_name or os.path.basename(
+        target_nc).strip('.nc')
     if not os.path.exists(target_nc):
         mkdirs(target_nc)
         data = source_data_function(
             *source_data_function_args,
             **source_data_function_kwargs
         )
-        store_nc(data, dataset_name, target_nc)
+        store_nc(data, cache_dataset_name, target_nc)
     with h5py.File(target_nc, "r", libver='latest') as target:
-        return target[dataset_name][()]
+        return target[cache_dataset_name][()]
 
 
 def parse_filepath(minx, miny, filename_base="dino"):
@@ -183,3 +185,19 @@ def parse_filepath(minx, miny, filename_base="dino"):
 def get_h5_data(filepath, dataset_name):
     with h5py.File(filepath, 'r', libver='latest') as h5file:
         return h5file.get(dataset_name)[:]
+
+
+def int_or_none(x):
+    try:
+        return int(x)
+    except ValueError:
+        return None
+
+
+def try_h5(fn, d=None):
+    try:
+        f = h5py.File(fn, 'r')
+        if d is not None:
+            f.get(d)[:]
+    except (OSError, TypeError):
+        return fn
