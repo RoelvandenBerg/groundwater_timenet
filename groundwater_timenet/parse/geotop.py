@@ -41,7 +41,6 @@ STRAT_CLASSES = {
 
 class GeotopData(Data):
     root = "geotop"
-    shape = (67, )
     type = Data.DataType.METADATA
 
     def __init__(self, filename='geotop.nc', *args, **kwargs):

@@ -9,12 +9,10 @@ class Data(object, metaclass=ABCMeta):
         TEMPORAL_DATA = 1
         METADATA = 2
 
+    nan = None
+
     def __init__(self, convert_nan=np.nan_to_num):
         self._convert_nan = convert_nan
-
-    @abstractproperty
-    def shape(self):
-        return ()
 
     @abstractproperty
     def root(self):
@@ -26,7 +24,7 @@ class Data(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _data(self, x, y, z=0, start=None, end=None):
-        return np.array([])
+        return
 
     @abstractmethod
     def _normalize(self, data):
@@ -34,6 +32,12 @@ class Data(object, metaclass=ABCMeta):
 
     def data(self, x, y, z=0):
         return self._convert_nan(self._normalize(self._data(x, y, z)))
+
+    def convert_nans(self, array):
+        data = array.astype("float64")
+        if self.nan is not None:
+            data[data == self.nan] = np.nan
+        return data
 
 
 class TemporalData(Data, metaclass=ABCMeta):

@@ -17,7 +17,7 @@ import numpy as np
 
 from groundwater_timenet import utils
 from groundwater_timenet import parse
-from groundwater_timenet.parse.knmi import raster_filenames
+from groundwater_timenet.utils import raster_filenames
 from abc import abstractproperty, abstractmethod, ABCMeta
 
 
@@ -194,7 +194,7 @@ class Knmi(Plots):
 
     def dataset_generator(self, key):
         for filepath in self.filenames[key]:
-            yield (utils.get_h5_data(filepath, self.subdataset_name[key]) *
+            yield (utils.read_h5(filepath, self.subdataset_name[key]) *
                    self.fraction[key]).astype('int')
 
     def plot(self):

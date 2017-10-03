@@ -1,10 +1,7 @@
 from urllib.request import urlopen
 import os
 
-try:
-    from groundwater_timenet import utils
-except ImportError:
-    from .. import utils
+from groundwater_timenet import utils
 
 
 logger = utils.setup_logging(__name__, utils.HARVEST_LOG)

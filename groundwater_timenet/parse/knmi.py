@@ -18,49 +18,9 @@ RAIN_NAN_VALUE = 65535
 ET_NAN_VALUE = -9999.0
 
 
-def _get_raster_filenames(rootdir, raise_errors, dataset_name=None):
-    files = sorted(
-        [
-            os.path.join(r, f[0]) for r, d, f in os.walk('var/data/' + rootdir)
-            if f
-        ]
-    )
-    faulty = [x for x in [utils.try_h5(f, dataset_name) for f in files] if x]
-    if faulty:
-        message = 'Broken HDF5 files found:\n- {}'.format('\n- '.join(faulty))
-        if raise_errors:
-            raise OSError(message)
-        else:
-            logger.debug(message)
-            return np.array(
-                [f.encode('utf8') for f in files if f not in faulty])
-    return np.array([f.encode('utf8') for f in files])
-
-
-def raster_filenames(
-        root, source_netcdf=None, raise_errors=True, dataset_name=None):
-    source_netcdf = source_netcdf or "var/data/cache/{}files.nc".format(
-        root if raise_errors else "filtered_" + root)
-    filenames = utils.cache_nc(
-        _get_raster_filenames, source_netcdf,
-        cache_dataset_name=root,
-        rootdir=root,
-        raise_errors=raise_errors,
-        dataset_name=dataset_name
-    )
-    return [f.decode('utf8') for f in filenames]
-
-
 class WeatherStationData(TemporalData):
-    shape = (-1, 1)
-    root = 'knmi'
-    resample_method = np.sum
-    HEADER = (
-        '# STN,YYYYMMDD,DDVEC,FHVEC,   FG,  FHX, FHXH,  FHN, FHNH,  FXX, '
-        'FXXH,   TG,   TN,  TNH,   TX,  TXH, T10N,T10NH,   SQ,   SP,    Q,   '
-        'DR,   RH,  RHX, RHXH,   PG,   PX,  PXH,   PN,  PNH,  VVN, VVNH,  '
-        'VVX, VVXH,   NG,   UG,   UX,  UXH,   UN,  UNH, EV24\n'
-    )
+    root = 'measurementstations'
+    resample_method = "sum"
 
     # All uncommented stations contain both rain and evaporation
     STATION_META = [
@@ -115,120 +75,80 @@ class WeatherStationData(TemporalData):
         ("380", (5.762, 50.906, 114.30, "MAASTRICHT")),
         ("391", (6.197, 51.498, 19.50, "ARCEN"))
     ]
+    RAIN_HEADERS = [22, 23, 24]  # = ['RH', 'RHX', 'RHXH']
+    EVAP_HEADERS = [40]          # = ['EV24']
 
-    # # Code to find out rain / evap datasets:
-    # RAIN_HEADERS = ['RH', 'RHX', 'RHXH']
-    # EVAP_HEADERS = ['EV24']
-    #
-    # header = [x.strip(' ') for x in HEADER.strip("\n").split(",")]
-    # dataset_contents = [
-    #     [dataset[0][0]] +
-    #     [label for i, label in enumerate(header) if not all(line[i] is None
-    #                                                     for line in dataset)]
-    #     for dataset in COLLECTED_DATA
-    # ]
-    # evap = [
-    #     l[0] for l in dataset_contents if any(xx in l for xx in
-    # EVAP_HEADERS)]
-    # rain = [
-    #     l[0] for l in dataset_contents if any(xx in l for xx in
-    # RAIN_HEADERS)]
-    # # make sure both are equal:
-    # all(xx == evap[i] for i, xx in rain)
-
-    def __init__(self, data_directory='var/data/knmi_measurementstations',
-                 *args, **kwargs):
+    def __init__(self, relevant_columns=None, *args, **kwargs):
         super(WeatherStationData, self).__init__(*args, **kwargs)
+        if relevant_columns is None:
+            relevant_columns = self.RAIN_HEADERS + self.EVAP_HEADERS
+        self.relevant_columns = [1] + relevant_columns
         self.geoms = utils.multipoint(
             (v[0], v[1]) for _, v in self.STATION_META)
         utils.transform(self.geoms)
-        self.data = dict(self._raw_data())
-        self.directory = data_directory
-
-    def _raw_data(self):
-        for filename in os.listdir(self.directory):
-            if 'etmgeg' in filename:
-                id_ = filename.replace('etmgeg_', '').replace('.txt', '')
-                path = os.path.join(self.directory, filename)
-                with open(path, 'r') as f:
-                    data = f.read().split(self.HEADER)[1]
-                    data_lines = data.split('\n')
-                    yield (id_, [
-                        [utils.int_or_none(l) for l in line.split(',')]
-                        for line in data_lines
-                        if line
-                    ])
 
     def closest(self, x, y):
         i = utils.closest_point(x, y, self.geoms)
         return self.STATION_META[i]
 
-    def data_from_metadata(self, metadata):
+    def _dataframe(self, metadata):
         station_code, meta = metadata
-        return self.data[station_code]
+        filepath = os.path.join('var', 'data', 'knmi', self.root + '.h5')
+        data = utils.read_h5(
+            filepath=filepath,
+            dataset_name=station_code,
+            index=(slice(None), self.relevant_columns)
+        )
+        index = pd.DatetimeIndex(
+            pd.Timestamp(str(int(t))) for t in data[:,0])
+        return pd.DataFrame(data[:, 1:], index=index)
 
     def _data(self, x, y, start=None, end=None):
-        return self.data_from_metadata(self.closest(x, y))
+        return self._dataframe(self.closest(x, y))
 
     def _normalize(self, data):
-        return data
+        return data / 100
 
 
 class KnmiData(TemporalData, metaclass=ABCMeta):
     z = None
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, grid_size=50, *args, **kwargs):
         super(KnmiData, self).__init__(*args, **kwargs)
-        self.files = raster_filenames(
-            root=self.root, raise_errors=False, dataset_name=self.dataset_name)
-        self.shape = len(self.files),
-        self.index = self._create_index()
-
-    @abstractproperty
-    def dataset_name(self):
-        return ""
-
-    def _create_index(self):
-        regex = re.compile(r'_(\d{8})', re.UNICODE)
-        return pd.DatetimeIndex([regex.findall(f)[0] for f in self.files])
+        self.grid_size = grid_size
 
     @abstractmethod
     def _transform(self, x, y):
         return x, y
 
-    def _get_h5_value(self, x, y, filepath, z=None):
-        dataset = utils.get_h5_data(filepath, self.dataset_name)
-        if z is None:
-            return dataset[y, x]
-        else:
-            return dataset[z, y, x]
-
-    def _index_slice(self, start, end):
-        start_i = None if (start is None or start < self.index[0]
-                        ) else self.index.get_loc(start)
-        end_i = None if (end is None or end < self.index[-1]
-                       ) else self.index.get_loc(end)
-        return slice(start_i, end_i)
-
-    def _timeseries(self, x, y, start, end):
-        index_slice = self._index_slice(start, end)
-        data = [self._get_h5_value(x, y, filepath, self.z)
-             for filepath in self.files[index_slice]]
-        return pd.DataFrame(
-            data,
-            index=self.index[index_slice]
+    def _dataframe(self, x, y):
+        modulo_x = x % self.grid_size
+        rounded_x = x - modulo_x
+        modulo_y = y % self.grid_size
+        rounded_y = y - modulo_y
+        filepath = os.path.join(
+            'var', 'data', 'knmi', self.root, str(rounded_x),
+            str(rounded_y) + '.h5'
         )
+        data, timestamps = utils.read_h5(
+            filepath=filepath,
+            dataset_name=("data", "timestamps"),
+            index=((modulo_y, modulo_x), ()),
+            many=True
+        )
+        index = pd.DatetimeIndex(
+            pd.Timestamp(y, m, d) for y, m, d in timestamps)
+        return pd.DataFrame(self._convert_nan(data), index=index)
 
     def _data(self, x, y, start=None, end=None, *args, **kwargs):
-        return self._timeseries(*self._transform(x, y), start=start, end=end)
+        return self._dataframe(*self._transform(x, y))
 
 
 class RainData(KnmiData):
     root = 'rain'
-    shape = ()
     resample_method = 'sum'
-    dataset_name = 'image1/image_data'
     affine = (0.0, 1.0, 0, -3649.98, 0, -1.0)
+    nan = 65535
 
     def __init__(self, *args, **kwargs):
         super(RainData, self).__init__(*args, **kwargs)
@@ -249,9 +169,8 @@ class RainData(KnmiData):
 class EvapoTranspirationData(KnmiData):
     z = 0
     root = 'et'
-    shape = ()
     resample_method = 'mean'
-    dataset_name = 'prediction'
+    nan = -9999
 
     def _transform(self, x, y):
         return int((x - 510) / 1000), int((y - 290592) / 1000)

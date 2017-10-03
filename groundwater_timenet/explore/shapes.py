@@ -9,6 +9,7 @@ from osgeo import ogr, osr, gdal
 import h5py
 import numpy as np
 
+import groundwater_timenet.utils
 from groundwater_timenet.utils import sliding_geom_window
 from groundwater_timenet.utils import mkdirs
 from groundwater_timenet.utils import bbox2polygon
@@ -69,7 +70,7 @@ def points_array(example_file):
     ])
 
 
-def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
+def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.h5"):
     array = cache_nc(
         points_array, source_netcdf,
         example_file=ex_et_file,
@@ -83,7 +84,7 @@ def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.nc"):
 
 def knmi_et_point_cloud():
     filepath = "var/data/shapes/knmi/et_pointcloud.shp"
-    et_files = knmi.raster_filenames(root="et")
+    et_files = groundwater_timenet.utils.raster_filenames(root="et")
     et_points = points_list(et_files[6])
     features = ((j, None) for i in et_points for j in i)
     geometry_type = ogr.wkbPoint
