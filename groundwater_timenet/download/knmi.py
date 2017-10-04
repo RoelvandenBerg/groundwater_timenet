@@ -85,7 +85,7 @@ def cache_measurement_station_data(
 
 
 def reshape_rasters(root, grid_size=50):
-    dataset_name, shape, slice_method= {
+    dataset_name, shape, slice_method = {
         "et": ('prediction', (350, 300), lambda si, sj: (0, si, sj)),
         'rain': ('image1/image_data', (765, 700), lambda si, sj: (si, sj))
     }[root]
@@ -123,7 +123,8 @@ if __name__ == '__main__':
                 'https://data.knmi.nl/datasets/EV24/2')
     load_knmi_measurement_data()
     cache_measurement_station_data()
-    if os.path.exists(EXAMPLE_RAIN_PATH) and os.path.exists(EXAMPLE_ET_PATH):
+    if not os.path.exists(EXAMPLE_RAIN_PATH) and not os.path.exists(
+            EXAMPLE_ET_PATH):
         reshape_rasters('rain')
         reshape_rasters('et')
     else:
@@ -132,4 +133,3 @@ if __name__ == '__main__':
             'Rain: https://data.knmi.nl/datasets/radar_corr_accum_24h/1.0 '
             'Evaporation: https://data.knmi.nl/datasets/EV24/2'
         )
-

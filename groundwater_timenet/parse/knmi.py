@@ -100,7 +100,7 @@ class WeatherStationData(TemporalData):
             index=(slice(None), self.relevant_columns)
         )
         index = pd.DatetimeIndex(
-            pd.Timestamp(str(int(t))) for t in data[:,0])
+            pd.Timestamp(str(int(t))) for t in data[:, 0])
         return pd.DataFrame(data[:, 1:], index=index)
 
     def _data(self, x, y, start=None, end=None):
@@ -116,10 +116,6 @@ class KnmiData(TemporalData, metaclass=ABCMeta):
     def __init__(self, grid_size=50, *args, **kwargs):
         super(KnmiData, self).__init__(*args, **kwargs)
         self.grid_size = grid_size
-
-    @abstractmethod
-    def _transform(self, x, y):
-        return x, y
 
     def _dataframe(self, x, y):
         modulo_x = x % self.grid_size
@@ -141,7 +137,7 @@ class KnmiData(TemporalData, metaclass=ABCMeta):
         return pd.DataFrame(self._convert_nan(data), index=index)
 
     def _data(self, x, y, start=None, end=None, *args, **kwargs):
-        return self._dataframe(*self._transform(x, y))
+        return self._dataframe(x, y)
 
 
 class RainData(KnmiData):

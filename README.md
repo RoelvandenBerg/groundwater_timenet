@@ -13,24 +13,24 @@ levels.
 - [X] other relevant data
 ##### parse data:
 - [X] geohydrology data (GEOTOP data)
-- [X] DINO groundwater levels
+- [ ] DINO groundwater levels
 - [X] KNMI rain measurement station data
 - [X] KNMI evaporation measurement station data
 - [X] KNMI rain
 - [X] KNMI evapotranspiration
-- [ ] soil data
-- [ ] other relevant data
+- [X] soil data
+- [X] other relevant data
 ##### data exploration:
 - [X] geohydrology data (GEOTOP data)
 - [X] DINO groundwater levels
 - [X] KNMI rain (use grids)
 - [X] KNMI evapotranspiration (use grids)
-- [ ] soil data
-- [ ] other relevant data
+- [X] soil data (used Qgis)
+- [X] other relevant data (used Qgis)
 ##### other improvements
 - [X] cache data in hdf5 files for faster performance
-- [ ] normalize data based on data exploration
-- [ ] make sure temporal dimensions match
+- [X] normalize data based on data exploration
+- [X] make sure temporal dimensions match
 - [ ] create one cached file with all normalized data
 ##### build a neural network with Keras / Tensorflow:
 - [ ] Wavenet atrous CNN architecture

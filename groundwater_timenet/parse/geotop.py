@@ -65,4 +65,3 @@ class GeotopData(Data):
     def _normalize(self, data):
         return np.concatenate(
             [self._strat(data[0]), np.array(data[1:]) / 100.0])
-
