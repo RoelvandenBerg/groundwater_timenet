@@ -14,7 +14,7 @@ from groundwater_timenet.utils import sliding_geom_window
 from groundwater_timenet.utils import mkdirs
 from groundwater_timenet.utils import bbox2polygon
 from groundwater_timenet.utils import point
-from groundwater_timenet.utils import cache_nc
+from groundwater_timenet.utils import cache_h5
 from groundwater_timenet.utils import transform
 from groundwater_timenet.parse import dino
 from groundwater_timenet.parse import knmi
@@ -71,7 +71,7 @@ def points_array(example_file):
 
 
 def points_list(ex_et_file, source_netcdf="var/data/cache/et_points.h5"):
-    array = cache_nc(
+    array = cache_h5(
         points_array, source_netcdf,
         example_file=ex_et_file,
     )
@@ -113,23 +113,13 @@ def knmi_rain_point_cloud():
     make_shape(filepath, fields, features, geometry_type, layername, bbox)
 
 
-def tryfloat(f):
-    try:
-        return float(f)
-    except (ValueError, TypeError):
-        pass
-    return 0.0
-
-
 def dino_point_cloud():
     filepath = "var/data/shapes/dino/dino.shp"
     dino_data = dino.list_metadata()
     features = [
         [
-            point(int(metadata[2]), int(metadata[3])), [
-                metadata[0], metadata[1], int(metadata[2]), int(metadata[3]),
-                filepath, metadata[4], metadata[5]
-            ] + [tryfloat(x) for x in metadata[6:]]
+            point(int(metadata[2]), int(metadata[3])),
+            metadata[:3] + [filepath] + metadata[4:]
         ] for filepath, metadata in dino_data
     ]
     geometry_type = ogr.wkbPoint

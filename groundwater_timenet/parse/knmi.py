@@ -107,7 +107,7 @@ class WeatherStationData(TemporalData):
         return self._dataframe(self.closest(x, y))
 
     def _normalize(self, data):
-        return data / 100
+        return (data / 100).reshape(-1, 1)
 
 
 class KnmiData(TemporalData, metaclass=ABCMeta):

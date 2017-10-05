@@ -35,13 +35,14 @@ STRAT_CLASSES = {
     '5080': 37, '5090': 38, '5120': 39, '5130': 40, '5140': 41, '5150': 42,
     '5180': 43, '5200': 44, '5230': 45, '5260': 46, '6000': 47, '6010': 48,
     '6100': 49, '6110': 50, '6200': 51, '6300': 52, '6320': 53, '6400': 54,
-    '6420': 55
+    '6420': 55, '-32767': 0
 }
 
 
 class GeotopData(Data):
     root = "geotop"
     type = Data.DataType.METADATA
+    nan = -127
 
     def __init__(self, filename='geotop.nc', *args, **kwargs):
         super(GeotopData, self).__init__(*args, **kwargs)

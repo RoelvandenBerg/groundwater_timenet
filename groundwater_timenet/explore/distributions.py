@@ -133,9 +133,10 @@ class Plots(Counts, metaclass=ABCMeta):
             xlabel=label,
             method="bar")
 
-    def line_plot(self, keys):
-        end = max([int(k) for key in keys for k in self[key].keys()])
-        start = min([int(k) for key in keys for k in self[key].keys()])
+    def line_plot(self, keys, start=None, end=None):
+        end = end or max([int(k) for key in keys for k in self[key].keys()])
+        start = start or min(
+            [int(k) for key in keys for k in self[key].keys()])
         self.percent_plot(keys, start=start, end=end, xlabel=keys[0])
 
 
@@ -258,12 +259,15 @@ class Dino(Plots):
 
     def plot(self):
         if self['groundwater']:
-            self.line_plot(('groundwater',))
+            self.line_plot(('groundwater',), start=-100, end=500)
         if self['top_depth_mv_up']:
-            self.line_plot(('top_depth_mv_up', 'top_depth_mv_down',))
+            self.line_plot(('top_depth_mv_up', 'top_depth_mv_down',),
+                           start=0, end=100)
         if self['bottom_depth_mv_up']:
-            self.line_plot(('bottom_depth_mv_up', 'bottom_depth_mv_down',))
+            self.line_plot(('bottom_depth_mv_up', 'bottom_depth_mv_down',),
+                           start=0, end=100)
         if self['top_height_nap_up']:
-            self.line_plot(('top_height_nap_up', 'top_height_nap_down',))
+            self.line_plot(('top_height_nap_up', 'top_height_nap_down',),
+                           start=-100, end=100)
         if self['bottom_height_mv_up']:
             self.line_plot(('bottom_height_mv_up', 'bottom_height_mv_down'))

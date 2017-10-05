@@ -139,7 +139,7 @@ def create_sliding_geom_window(
 def sliding_geom_window(
         source_json='NederlandRegion.json', gridHeight=10000, gridWidth=10000,
         source_netcdf="var/data/cache/sliding_geom.h5"):
-    geom_array = cache_nc(
+    geom_array = cache_h5(
         create_sliding_geom_window,  source_netcdf, "geom_window",
         source_json=source_json,
         gridHeight=gridHeight,
@@ -156,6 +156,7 @@ def store_h5(
     if not many:
         data = [data]
         dataset_name = [dataset_name]
+    mkdirs(target_h5)
     with h5py.File(target_h5, "w", libver='latest') as h5_file:
         for i, dataset_data in enumerate(data):
             dataset = h5_file.create_dataset(
@@ -180,20 +181,20 @@ def read_h5(filepath, dataset_name, index=None, many=False):
             )
 
 
-def cache_nc(source_data_function, target_nc, cache_dataset_name=None,
+def cache_h5(source_data_function, target_h5, cache_dataset_name=None,
              decode=None, *source_data_function_args,
              **source_data_function_kwargs
              ):
     cache_dataset_name = cache_dataset_name or os.path.basename(
-        target_nc).strip('.h5')
-    if not os.path.exists(target_nc):
-        mkdirs(target_nc)
+        target_h5).strip('.h5')
+    if not os.path.exists(target_h5):
+        mkdirs(target_h5)
         data = source_data_function(
             *source_data_function_args,
             **source_data_function_kwargs
         )
-        store_h5(data, cache_dataset_name, target_nc)
-    with h5py.File(target_nc, "r", libver='latest') as target:
+        store_h5(data, cache_dataset_name, target_h5)
+    with h5py.File(target_h5, "r", libver='latest') as target:
         return target[cache_dataset_name][()]
 
 
@@ -221,6 +222,14 @@ def try_h5(fn, d=None):
         return fn
 
 
+def tryfloat(f):
+    try:
+        return float(f)
+    except (ValueError, TypeError):
+        pass
+    return 0.0
+
+
 def _get_raster_filenames(rootdir, raise_errors, dataset_name=None):
     files = sorted(
         [
@@ -244,7 +253,7 @@ def raster_filenames(
         root, source_netcdf=None, raise_errors=True, dataset_name=None):
     source_netcdf = source_netcdf or "var/data/cache/{}files.h5".format(
         root if raise_errors else "filtered_" + root)
-    filenames = cache_nc(
+    filenames = cache_h5(
         _get_raster_filenames, source_netcdf,
         cache_dataset_name=root,
         rootdir=root,

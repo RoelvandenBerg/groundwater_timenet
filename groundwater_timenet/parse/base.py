@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractproperty, abstractmethod
+import random
 
 from osgeo import ogr, gdal
 import numpy as np
@@ -13,7 +14,7 @@ class Data(object, metaclass=ABCMeta):
     nan = None
     classes = {}
 
-    def __init__(self, convert_nan=np.nan_to_num):
+    def __init__(self, convert_nan=np.nan_to_num, *args, **kwargs):
         self._convert_nan = convert_nan
 
     def classify(self, class_type, class_name):
@@ -45,15 +46,21 @@ class Data(object, metaclass=ABCMeta):
         x_offset, y_offset = self._transform(x, y)
         return self._convert_nan(
             self._normalize(
-                self._data(x_offset, y_offset, z)
+                self._convert_to_nans(
+                    self._data(x_offset, y_offset, z)
+                )
             )
         )
 
-    def convert_nans(self, array):
-        data = array.astype("float64")
+    def _convert_to_nans(self, array):
         if self.nan is not None:
-            data[data == self.nan] = np.nan
-        return data
+            if isinstance(array, np.ndarray):
+                data = array.astype("float64")
+                data[data == self.nan] = np.nan
+                return data
+            else:
+                return [x if x != self.nan else np.nan for x in array]
+        return array
 
 
 class SpatialVectorData(Data, metaclass=ABCMeta):
@@ -125,11 +132,88 @@ class TemporalData(Data, metaclass=ABCMeta):
 
     def data(self, x, y, start=None, end=None):
         x_offset, y_offset = self._transform(x, y)
-        data = self._data(x_offset, y_offset, start, end)
+        return self._convert_nan(
+            self._normalize(
+                self._convert_to_nans(
+                    self._resample(
+                        self._data(x_offset, y_offset, start, end)
+                    )
+                )
+            )
+        )
+
+    def _resample(self, data, start=None, end=None):
         if self.resample_method == 'first':
             data = data.resample(self.timedelta).first()
         else:
             data = data.resample(
                 self.timedelta).agg(getattr(np, self.resample_method))
-        data = data[start:end].as_matrix()
-        return self._convert_nan(self._normalize(data))
+        if start is None and end is None:
+            return data.as_matrix()
+        else:
+            return data[start:end].as_matrix()
+
+
+class BaseData(TemporalData, metaclass=ABCMeta):
+    data = None
+
+    def __init__(
+            self, seed=4177, train_percentage=70, validation_percentage=20,
+            test_percentage=10, *args, **kwargs):
+        assert(
+            test_percentage + validation_percentage + train_percentage == 100)
+        super(BaseData, self).__init__(*args, **kwargs)
+        self.seed = seed
+        self._all_metadata = self._read_metadata()
+        self._parts = {
+            "train": self._pct_to_index(0, train_percentage),
+            "validation": self._pct_to_index(
+                train_percentage, validation_percentage),
+            "test": self._pct_to_index(validation_percentage, 100)
+        }
+        self._iterator = None
+
+    def _pct_to_index(self, from_pct, to_pct):
+        return slice(int(len(self) * from_pct / 100.0), int(len(self) *
+                                                            to_pct / 100.0))
+
+    @abstractmethod
+    def _data(self, slice_):
+        yield
+
+    @abstractmethod
+    def _unpack(self, metadata, data):
+        return 0, 0, 0, metadata, data
+
+    @abstractmethod
+    def _read_metadata(self):
+        return []
+
+    def __len__(self):
+        return len(self._all_metadata)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._iterator is not None:
+            x, y, z, metadata, dataframe = self._unpack(*next(self._iterator))
+            start = dataframe.index[0].to_pydatetime()
+            end = dataframe.index[-1].to_pydatetime()
+            return x, y, z, start, end, metadata, self._convert_nan(
+                self._normalize(
+                    self._convert_to_nans(
+                        self._resample(
+                            dataframe
+                        )
+                    )
+                )
+            )
+        raise StopIteration
+
+    def __call__(self, part):
+        random.seed(self.seed)
+        self._iterator = iter(self._data(self._parts[part]))
+        return iter(self)
+
+
