@@ -8,6 +8,7 @@ import shutil
 from osgeo import ogr, osr, gdal
 import h5py
 import numpy as np
+import pandas as pd
 
 import groundwater_timenet.utils
 from groundwater_timenet.utils import sliding_geom_window
@@ -116,31 +117,37 @@ def knmi_rain_point_cloud():
 def dino_point_cloud():
     filepath = "var/data/shapes/dino/dino.shp"
     dino_data = dino.list_metadata()
+    OGR_TYPES = {
+        'O': ogr.OFTString,
+        'M': ogr.OFTString,
+        'i': ogr.OFTInteger,
+        'f': ogr.OFTReal
+    }
+    SHORT_HEADERS = {
+        'bottom_depth_mv_down': 'bt_d_mv_d',
+        'bottom_depth_mv_up': 'bt_d_mv_u',
+        'bottom_height_nap_down': 'bt_h_nap_d',
+        'bottom_height_nap_up': 'bt_h_nap_u',
+        'median_step': 'median_stp',
+        'top_depth_mv_down': 'top_d_mv_d',
+        'top_depth_mv_up': 'top_d_mv_u',
+        'top_height_nap_down': 'top_h_mv_d',
+        'top_height_nap_up': 'top_h_mv_u'
+    }
+    fields = [
+        (
+            SHORT_HEADERS.get(column, column),
+            OGR_TYPES[dino_data[column].dtype.kind]
+        ) for column in dino_data.columns
+    ]
     features = [
         [
-            point(int(metadata[2]), int(metadata[3])),
-            metadata[:3] + [filepath] + metadata[4:]
-        ] for filepath, metadata in dino_data
+            point(int(metadata.x), int(metadata.y)),
+            [str(x) if isinstance(x, pd.Timestamp) else x for x in metadata]
+        ] for _, metadata in dino_data.iterrows()
     ]
     geometry_type = ogr.wkbPoint
-    fields = (
-        ("dino_well_nr", ogr.OFTString),
-        ("filter_nr", ogr.OFTString),
-        ("x_rd_crd", ogr.OFTInteger),
-        ("y_rd_crd", ogr.OFTInteger),
-        ("filepath", ogr.OFTString),
-        ("Grondwaterstand|start_date", ogr.OFTString),
-        ("Grondwaterstand|end_date", ogr.OFTString),
-        ("top_depth_mv_up", ogr.OFTReal),
-        ("top_depth_mv_down", ogr.OFTReal),
-        ("bottom_depth_mv_up", ogr.OFTReal),
-        ("bottom_depth_mv_down", ogr.OFTReal),
-        ("top_height_nap_up", ogr.OFTReal),
-        ("top_height_nap_down", ogr.OFTReal),
-        ("bottom_height_nap_up", ogr.OFTReal),
-        ("bottom_height_nap_down", ogr.OFTReal),
-    )
-    layername = "et"
+    layername = "dino"
     make_shape(filepath, fields, features, geometry_type, layername)
 
 

@@ -14,6 +14,7 @@ from matplotlib import pyplot
 from netCDF4 import Dataset
 import h5py
 import numpy as np
+import pandas as pd
 
 from groundwater_timenet import utils
 from groundwater_timenet import parse
@@ -97,7 +98,8 @@ class Plots(Counts, metaclass=ABCMeta):
         pass
 
     def _count_plot(
-            self, x_axis, data, legend=None, xlabel=None, method='plot'):
+            self, x_axis, data, legend=None, xlabel=None, method='plot',
+            filename="default"):
         pyplot.cla()
         for data_set in data:
             getattr(pyplot, method)(x_axis, data_set)
@@ -256,6 +258,14 @@ class Dino(Plots):
         if key == 'groundwater':
             return self.groundwater_generator()
         return self.metadata_generator(key)
+
+    def dino_median_frequency_counts(self):
+        metadata = parse.dino.list_metadata()
+        counts = pd.DataFrame(np.bincount(metadata['median_step']))
+        self._count_plot(
+            counts.index.tolist()[:130],
+            [counts.values[:120]],
+            filename="dino_median_step_counts")
 
     def plot(self):
         if self['groundwater']:

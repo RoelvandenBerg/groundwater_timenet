@@ -13,6 +13,8 @@ from groundwater_timenet.parse.base import BaseData
 
 logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
 
+DATETIME_EPOCH = datetime.datetime(1970,1,1)
+
 
 def filepaths():
     return (
@@ -28,8 +30,33 @@ def _list_metadata(shuffled=False):
     for filepath in filepaths():
         h5_file = h5py.File(filepath, "r")
         metadata = h5_file.get("metadata", [])
-        new_meta = {
-            tuple([filepath.encode('utf8')] + list(x)) for x in metadata}
+        new_meta = set()
+        for md in metadata:
+            wellcode = md[0].decode('utf8')
+            filtercode = md[1].decode('utf8')
+            dataset = h5_file.get(wellcode + filtercode)
+            try:
+                s, e = dataset[[-1, 0], 0]
+            except OSError:
+                logger.debug("Left out well %s.%s: only 1 record found",
+                             wellcode, filtercode)
+                continue
+            days = int((e - s) / 86400)
+            if days < (365 * 2):
+                logger.debug("Left out well %s.%s: only %d records found",
+                             wellcode, filtercode, days)
+                continue
+            density = dataset.shape[0] / days
+            delta = abs(np.diff(dataset[:,0]))
+            min_step = int(np.min(delta) / 86400)
+            max_step = int(np.max(delta) / 86400)
+            median_step = int(np.median(delta) / 86400)
+            new_meta.add(
+                tuple([filepath.encode('utf8')] +
+                      md.tolist() +
+                      [days, dataset.shape[0], density, s, e, min_step,
+                       median_step, max_step])
+            )
         total = total.union(new_meta)
         length = len(new_meta)
         if length == 0:
@@ -52,11 +79,40 @@ def list_metadata(shuffled=False):
         target_h5=os.path.join("var", "data", "cache", "dino_base_metadata"),
         shuffled=shuffled
     )
-    return [
-        (meta[0], [meta[1], meta[2], int(meta[3]), int(meta[4]), meta[5],
-                   meta[6]] + [utils.tryfloat(x) for x in meta[7:]])
-        for meta in ([d.decode('utf-8') for d in md] for md in metadata)
+    metadata[metadata == b''] = np.nan
+    columns = [
+        ('filepath', str),
+        ('wellcode', str),
+        ('filtercode', str),
+        ('x', int),
+        ('y', int),
+        ('start_meta', str),
+        ('end_meta', str),
+        ('top_depth_mv_up', float),
+        ('top_depth_mv_down', float),
+        ('bottom_depth_mv_up', float),
+        ('bottom_depth_mv_down', float),
+        ('top_height_nap_up', float),
+        ('top_height_nap_down', float),
+        ('bottom_height_nap_up', float),
+        ('bottom_height_nap_down', float),
+        ('days', int),
+        ('counts', int),
+        ('density', float),
+        ('start', 'datetime64[s]'),
+        ('end', 'datetime64[s]'),
+        ('min_step', int),
+        ('median_step', int),
+        ('max_step', int)
     ]
+    values = {}
+    for i, (column, astype) in enumerate(columns):
+        try:
+            values[column] = metadata[:, i].astype(astype)
+        except ValueError:
+            values[column] = metadata[:, i].astype(float).astype(astype)
+
+    return pd.DataFrame(values)
 
 
 class DinoData(BaseData):
@@ -67,17 +123,24 @@ class DinoData(BaseData):
         return list_metadata(shuffled=True)
 
     def _data(self, slice_):
-        for filepath, metadata in self._all_metadata[slice_]:
-            h5_file = h5py.File(filepath, "r")
-            data = h5_file.get(metadata[0] + metadata[1], [])
-            yield data, metadata
-
-    def _unpack(self, data, metadata):
-        x, y = metadata[2:4]
-        z = metadata[10] or metadata[11] or 1  # = top_height_nap
-        index = pd.DatetimeIndex(data[:,0].astype('datetime64[s]'))
-        dataframe = pd.DataFrame(data[:,1], index=index)
-        return x, y, z, metadata[6:], dataframe
+        metadata_sorted = self.select(
+            self.selection, self._all_metadata[slice_]
+        ).copy().sort_values(by="days", ascending=False)
+        metadata = (a for _, a in metadata_sorted.iterrows())
+        for row in metadata:
+            h5_file = h5py.File(row.filepath, "r")
+            timeseries_code = row.wellcode + row.filtercode
+            data = h5_file.get(timeseries_code, [])
+            index = pd.DatetimeIndex(data[:, 0].astype('datetime64[s]'))
+            dataframe = pd.DataFrame(data[:, 1], index=index)
+            z = (
+                row.top_depth_mv_up or
+                row.top_depth_mv_down or
+                row.bottom_depth_mv_up or
+                row.bottom_depth_mv_down or
+                1
+            )
+            yield row.x, row.y, z, row, dataframe
 
     def _to_date(self, date):
         datestr = str(date)

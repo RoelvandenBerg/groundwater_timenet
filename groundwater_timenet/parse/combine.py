@@ -9,7 +9,14 @@ from .dino import DinoData
 from groundwater_timenet import utils
 
 
-class DataCombiner(object):
+DEFAULT_SELECTION = (
+    '((counts / (days / 15)) > 0) & '
+    '(median_step <= 15) & '
+    '(days > (365 * 2))'
+)
+
+
+class Combiner(object):
     """
     For different timesteps see:
     http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
@@ -19,7 +26,8 @@ class DataCombiner(object):
         'day': "D",
         'week': "W",
         'month': "M",
-        'halfmonthly': "SM"
+        'halfmonthly': "SM",
+        '15day': '15D'
     }
     data_sources = (
         WeatherStationData,
@@ -29,15 +37,23 @@ class DataCombiner(object):
         DinoData
     )
 
-    def __init__(self, timestep="day", chunk_size=1000, *args, **kwargs):
+    def __init__(
+            self, timestep="halfmonthly", resample_method='first',
+            chunk_size=1000, selection=DEFAULT_SELECTION, *args, **kwargs):
         self.chunk_size = chunk_size
         self.timestep = self.timedeltas.get(timestep, timestep)
         self._meta_data = [metadata(*args, **kwargs)  for metadata in
                          self._filter_source(Data.DataType.METADATA)]
-        self._temporal_data = [temporal(*args, **kwargs) for temporal in
-                             self._filter_source(Data.DataType.TEMPORAL_DATA)]
+        self._temporal_data = [
+            temporal(
+                timedelta=self.timestep, resample_method=resample_method,
+                *args, **kwargs) for temporal in
+            self._filter_source(Data.DataType.TEMPORAL_DATA)
+        ]
         self._base_data = self._filter_source(Data.DataType.BASE)[0](
-            *args, **kwargs)
+            timedelta=self.timestep, resample_method=resample_method,
+            selection=selection, *args, **kwargs
+        )
         self.dataset_name = tuple(
             name + "_" + str(i) for name in ("base", "temporal", "meta")
             for i in range(self.chunk_size)
@@ -48,18 +64,23 @@ class DataCombiner(object):
             filter(lambda ds: ds.type == data_type, self.data_sources))
 
     def meta_data(self, base, x, y, z):
+        # TODO handle base metadata
         return np.concatenate(
             [base] + [metadata.data(x, y, z) for metadata in self._meta_data])
 
     def temporal_data(self, base, x, y, z, start, end):
         result = [base] + [data.data(x, y, start, end) for data in self._temporal_data]
         print([x.shape for x in result])
-        return np.concatenate(
+        return np.array(
             [base] +
             [data.data(x, y, start, end) for data in self._temporal_data]
         )
 
-    def combine(self, part):
+    def combine_ltsm(self, part):
+        # TODO!
+        pass
+
+    def combine_convolutional(self, part):
         temporal = []
         meta = []
         base = []
