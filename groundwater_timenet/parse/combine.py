@@ -94,7 +94,7 @@ class Combiner(object):
             base.append(base_data)
             temporal.append(self.temporal_data(base_data, x, y, start, end))
             meta.append(self.meta_data(base_metadata, x, y, z))
-            if not i % self.chunk_size and i != 0:
+            if not (i + 1) % self.chunk_size and i != 0:
                 filepath = os.path.join(
                     "var", "data", "neuralnet", part, str(i) + ".h5")
                 utils.store_h5(

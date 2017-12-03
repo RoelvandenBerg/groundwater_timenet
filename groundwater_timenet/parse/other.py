@@ -20,13 +20,20 @@ class Bofek(SpatialVectorData):
     def __init__(self, *args, **kwargs):
         super(Bofek, self).__init__(*args, **kwargs)
         self._initialize_spatial_classes("BOFEK2012")
+        self.empty = np.zeros(len(self.classes['bofek']))
 
     def _data(self, x, y, z=0, *args, **kwargs):
         point = utils.point(x, y)
-        return self._layer_data("BOFEK2012", point)[0]
+        try:
+            return self._layer_data("BOFEK2012", point)[0]
+        except IndexError:
+            return self.empty
 
     def _normalize(self, data):
-        return self.classify('bofek', data)
+        try:
+            return self.classify('bofek', data)
+        except ValueError:
+            return data
 
 
 class Irrigation(SpatialVectorData):
