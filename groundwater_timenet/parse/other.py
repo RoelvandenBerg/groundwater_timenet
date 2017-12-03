@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+
 from groundwater_timenet import utils
 from groundwater_timenet.parse.base import SpatialVectorData, SpatialRasterData
 
@@ -45,7 +47,8 @@ class Irrigation(SpatialVectorData):
             x + self.bbox_buffer,
             y + self.bbox_buffer
         )
-        return len([x for x in self._layer_data("GRID_CODE", bbox) if x == 1])
+        return np.array(
+            [len([x for x in self._layer_data("GRID_CODE", bbox) if x == 1])])
 
     def _normalize(self, data):
         return data / 64.0

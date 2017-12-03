@@ -7,6 +7,7 @@ from .base import Data
 from .geotop import GeotopData
 from .knmi import WeatherStationData, RainData, EvapoTranspirationData
 from .dino import DinoData
+from .other import Bofek, Irrigation, DrinkingWater
 from groundwater_timenet import utils
 
 
@@ -35,11 +36,14 @@ class Combiner(object):
         '15day': '15D'
     }
     data_sources = (
+        DinoData,
         WeatherStationData,
         RainData,
         EvapoTranspirationData,
         GeotopData,
-        DinoData
+        Bofek,
+        Irrigation,
+        DrinkingWater
     )
 
     def __init__(
