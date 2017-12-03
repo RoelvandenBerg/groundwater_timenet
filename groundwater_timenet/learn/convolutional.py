@@ -30,6 +30,7 @@ def create_model(filters, kernel_size, layer_dilation=LAYER_DILATION,
     # todo: how to choose the filters and kernel_size?
     # Probably: 365 or 366 (a year of data / a year of data + 1)
     # kernel_size should be a day I guess? (1, ..) SEE: http://sergeiturukin.com/2017/03/02/wavenet.html
+    # TODO: apart from this model also add a metadata layer and merge (Keras merge layer) these with the same shape on the first (and/or last?) conv layer.
     model = Sequential()
     defaults['input_shape'] = input_shape
     for dilation_rate in layer_dilation:

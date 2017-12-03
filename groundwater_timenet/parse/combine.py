@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import numpy as np
@@ -9,11 +10,15 @@ from .dino import DinoData
 from groundwater_timenet import utils
 
 
+logger = utils.setup_logging(__name__, utils.PARSE_LOG, "INFO")
+
+
 DEFAULT_SELECTION = (
     '((counts / (days / 15)) > 0) & '
     '(median_step <= 15) & '
     '(days > (365 * 2))'
 )
+FIRST_DATESTAMP = datetime.date(1965, 1, 1)
 
 
 class Combiner(object):
@@ -38,8 +43,9 @@ class Combiner(object):
     )
 
     def __init__(
-            self, timestep="halfmonthly", resample_method='first',
-            chunk_size=1000, selection=DEFAULT_SELECTION, *args, **kwargs):
+            self, timestep="15day", resample_method='first',
+            first_datestamp=FIRST_DATESTAMP, chunk_size=1000,
+            selection=DEFAULT_SELECTION, *args, **kwargs):
         self.chunk_size = chunk_size
         self.timestep = self.timedeltas.get(timestep, timestep)
         self._meta_data = [metadata(*args, **kwargs)  for metadata in
@@ -47,12 +53,13 @@ class Combiner(object):
         self._temporal_data = [
             temporal(
                 timedelta=self.timestep, resample_method=resample_method,
-                *args, **kwargs) for temporal in
-            self._filter_source(Data.DataType.TEMPORAL_DATA)
+                first_timestamp=first_datestamp, *args, **kwargs)
+            for temporal in self._filter_source(Data.DataType.TEMPORAL_DATA)
         ]
         self._base_data = self._filter_source(Data.DataType.BASE)[0](
             timedelta=self.timestep, resample_method=resample_method,
-            selection=selection, *args, **kwargs
+            selection=selection, first_timestamp=first_datestamp,
+            *args, **kwargs
         )
         self.dataset_name = tuple(
             name + "_" + str(i) for name in ("base", "temporal", "meta")
@@ -64,32 +71,26 @@ class Combiner(object):
             filter(lambda ds: ds.type == data_type, self.data_sources))
 
     def meta_data(self, base, x, y, z):
-        # TODO handle base metadata
         return np.concatenate(
             [base] + [metadata.data(x, y, z) for metadata in self._meta_data])
 
-    def temporal_data(self, base, x, y, z, start, end):
-        result = [base] + [data.data(x, y, start, end) for data in self._temporal_data]
-        print([x.shape for x in result])
-        return np.array(
-            [base] +
-            [data.data(x, y, start, end) for data in self._temporal_data]
-        )
+    def temporal_data(self, base, x, y, start, end):
+        temporal_data = [base] + [
+                data.data(x, y, start, end)
+                for data in self._temporal_data
+            ]
+        return np.vstack(temporal_data)
 
-    def combine_ltsm(self, part):
-        # TODO!
-        pass
-
-    def combine_convolutional(self, part):
+    def combine(self, part):
         temporal = []
         meta = []
         base = []
         for i, params in enumerate(self._base_data(part)):
             x, y, z, start, end, base_metadata, base_data = params
             base.append(base_data)
-            temporal.append(self.temporal_data(base_data, x, y, z, start, end))
+            temporal.append(self.temporal_data(base_data, x, y, start, end))
             meta.append(self.meta_data(base_metadata, x, y, z))
-            if not i % self.chunk_size:
+            if not i % self.chunk_size and i != 0:
                 filepath = os.path.join(
                     "var", "data", "neuralnet", part, str(i) + ".h5")
                 utils.store_h5(
@@ -98,6 +99,9 @@ class Combiner(object):
                     target_h5=filepath,
                     many=True
                 )
+                logger.info(
+                    "Combined %d series in total. Wrote %d to file %s.",
+                    i, self.chunk_size, filepath)
                 temporal = []
                 meta = []
                 base = []

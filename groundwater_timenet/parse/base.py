@@ -1,9 +1,11 @@
 from abc import ABCMeta, abstractproperty, abstractmethod
+import datetime
 import random
 import operator
 
 from osgeo import ogr, gdal
 import numpy as np
+import pandas as pd
 
 
 class Data(object, metaclass=ABCMeta):
@@ -119,13 +121,18 @@ class TemporalData(Data, metaclass=ABCMeta):
     timedelta = "D"
     resample_method = 'first'
     type = Data.DataType.TEMPORAL_DATA
+    first_datestamp = datetime.date(1, 1, 1)
 
-    def __init__(self, timedelta=None, resample_method=None, *args, **kwargs):
+    def __init__(
+            self, timedelta=None, resample_method=None, first_datestamp=None,
+            *args, **kwargs):
         super(TemporalData, self).__init__(*args, **kwargs)
         if timedelta is not None:
             self.timedelta = timedelta
         if resample_method is not None:
             self.resample_method = resample_method
+        if first_datestamp is not None:
+            self.first_datestamp = first_datestamp
 
     @abstractmethod
     def _data(self, x, y, start=None, end=None):
@@ -137,7 +144,8 @@ class TemporalData(Data, metaclass=ABCMeta):
             self._normalize(
                 self._convert_to_nans(
                     self._resample(
-                        self._data(x_offset, y_offset, start, end)
+                        self._data(x_offset, y_offset, start, end),
+                        start=start, end=end
                     )
                 )
             )
@@ -150,9 +158,18 @@ class TemporalData(Data, metaclass=ABCMeta):
             data = data.resample(
                 self.timedelta).agg(getattr(np, self.resample_method))
         if start is None and end is None:
-            return data.as_matrix()
+            return data.as_matrix().T
         else:
-            return data[start:end].as_matrix()
+            start = (
+                start if start > self.first_datestamp else self.first_datestamp
+            )
+            return data.reindex(
+                pd.DatetimeIndex(
+                    start=start,
+                    end=end,
+                    freq=self.timedelta
+                )
+            ).as_matrix().T
 
 
 class SelectorMixin(object):
@@ -271,18 +288,16 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
 
     def __next__(self):
         if self._iterator is not None:
-            x, y, z, metadata, dataframe = next(self._iterator)
-            start = metadata.start.to_pydatetime()
-            end = metadata.end.to_pydatetime()
-            return x, y, z, start, end, metadata, self._convert_nan(
-                self._normalize(
-                    self._convert_to_nans(
-                        self._resample(
-                            dataframe
-                        )
-                    )
-                )
-            )
+            x, y, z, meta_row, metadata, dataframe = next(self._iterator)
+            start = meta_row.start.to_pydatetime().date()
+            end = meta_row.end.to_pydatetime().date()
+            return (
+                x, y, z, start, end, metadata,
+                self._convert_nan(
+                    self._normalize(
+                        self._convert_to_nans(
+                            self._resample(dataframe, start, end)
+                        ))))
         raise StopIteration
 
     def __call__(self, part):

@@ -36,7 +36,7 @@ def _list_metadata(shuffled=False):
             filtercode = md[1].decode('utf8')
             dataset = h5_file.get(wellcode + filtercode)
             try:
-                s, e = dataset[[-1, 0], 0]
+                s, e = dataset[[-1, 0], 0].astype('datetime64[D]')
             except OSError:
                 logger.debug("Left out well %s.%s: only 1 record found",
                              wellcode, filtercode)
@@ -118,6 +118,16 @@ def list_metadata(shuffled=False):
 class DinoData(BaseData):
     root = 'dino'
     type = BaseData.DataType.BASE
+    relevant_meta = (
+        'top_depth_mv_up',
+        'top_depth_mv_down',
+        'bottom_depth_mv_up',
+        'bottom_depth_mv_down',
+        'top_height_nap_up',
+        'top_height_nap_down',
+        'bottom_height_nap_up',
+        'bottom_height_nap_down'
+    )
 
     def _read_metadata(self):
         return list_metadata(shuffled=True)
@@ -126,7 +136,11 @@ class DinoData(BaseData):
         metadata_sorted = self.select(
             self.selection, self._all_metadata[slice_]
         ).copy().sort_values(by="days", ascending=False)
+        filtercodes = {
+            s: i for i, s in enumerate(sorted(set(metadata_sorted.filtercode)))
+        }
         metadata = (a for _, a in metadata_sorted.iterrows())
+
         for row in metadata:
             h5_file = h5py.File(row.filepath, "r")
             timeseries_code = row.wellcode + row.filtercode
@@ -134,13 +148,14 @@ class DinoData(BaseData):
             index = pd.DatetimeIndex(data[:, 0].astype('datetime64[s]'))
             dataframe = pd.DataFrame(data[:, 1], index=index)
             z = (
-                row.top_depth_mv_up or
-                row.top_depth_mv_down or
-                row.bottom_depth_mv_up or
-                row.bottom_depth_mv_down or
-                1
+                row.top_height_nap_up or
+                row.top_height_nap_down or
+                row.bottom_height_nap_up or
+                row.bottom_height_nap_down or
+                -9999
             )
-            yield row.x, row.y, z, row, dataframe
+            yield row.x, row.y, z, row, self.metadata_array(
+                row, filtercodes), dataframe
 
     def _to_date(self, date):
         datestr = str(date)
@@ -150,6 +165,17 @@ class DinoData(BaseData):
         total = sum([y[1].shape[0] for y in self._data(slice(None))])
         logger.info("%d individual timesteps found", total)
         return total
+
+    def _filtercode(self, code, filtercodes):
+        zeros = np.zeros(56)
+        zeros[filtercodes[code]] = 1
+        return zeros
+
+    def metadata_array(self, row, filtercodes):
+        return np.concatenate(
+                [self._filtercode(row.filtercode, filtercodes), np.array(
+                    [row[meta] for meta in self.relevant_meta])]
+        )
 
     def _normalize(self, data):
         return data / 500  # This can also be normalized using a distribution.

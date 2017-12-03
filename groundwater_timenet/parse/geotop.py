@@ -43,6 +43,7 @@ class GeotopData(Data):
     root = "geotop"
     type = Data.DataType.METADATA
     nan = -127
+    EMPTY = np.zeros(1)
 
     def __init__(self, filename='geotop.nc', *args, **kwargs):
         super(GeotopData, self).__init__(*args, **kwargs)
@@ -50,19 +51,40 @@ class GeotopData(Data):
         self.rootgrp = Dataset(self.filepath, "r")
 
     def _data(self, x, y, z=0, *args, **kwargs):
-        depth = int(round((z + 50) * 2))
         rd_x = int(round(x - 13600) / 100)
         rd_y = int(round(y - 358000) / 100)
-        return [
-            self.rootgrp[variable][rd_x, rd_y, depth]
-            for variable in RELEVANT_VARIABLES
-        ]
+        if rd_x < 0 or rd_y < 0:
+            return []
+        assert self.rootgrp['x'][rd_x] == (x // 100 * 100)
+        assert self.rootgrp['y'][rd_y] == (y // 100 * 100)
+        if z != -9999 and not np.isnan(z):
+            depth = int(round((z + 50) * 2))
+            if depth < 0:
+                return []
+            return [
+                self.rootgrp[variable][rd_x, rd_y, depth]
+                for variable in RELEVANT_VARIABLES
+            ]
+        else:
+            # We don't know the depth of the well: look for first value in the
+            # z direction. This is the surface. We choose the depth as a meter
+            # below the surface (= -2 * voxels of 0.5m high).
+            where = np.where(self.rootgrp['strat'][rd_x, rd_y, :] == '-32767')
+            if where[0]:
+                depth = where[0][0] - 2
+                return [
+                    self.rootgrp[variable][rd_x, rd_y, depth]
+                    for variable in RELEVANT_VARIABLES
+                ]
+        return []
 
     def _strat(self, code):
         zeros = np.zeros(56)
         zeros[STRAT_CLASSES[str(code)]] = 1
-        return zeros
+        return zeros[1:]
 
     def _normalize(self, data):
+        if not data:
+            return self.EMPTY
         return np.concatenate(
             [self._strat(data[0]), np.array(data[1:]) / 100.0])
