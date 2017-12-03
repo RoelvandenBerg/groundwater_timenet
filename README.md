@@ -111,8 +111,9 @@ http://www.dinodata.nl/opendap/GeoTOP/contents.html), with [this](
 http://www.dinodata.nl/opendap/GeoTOP/codering_geotop.pdf) description. It
 is saved as netcdf.
 
-GeoTOP contains data on a 100m x 100m x 0.5m resolution for the whole of the
-Netherlands between -50.0m 106.5m NAP.
+GeoTOP contains data on a 100m x 100m x 0.5m resolution for 
+[half](https://www.dinoloket.nl/node/6335) of the Netherlands between 
+-50.0m and 106.5m NAP.
 
 - x-coordinate in Cartesian system
 - y-coordinate in Cartesian system

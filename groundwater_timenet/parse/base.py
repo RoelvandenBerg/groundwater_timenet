@@ -1,8 +1,11 @@
 from abc import ABCMeta, abstractproperty, abstractmethod
+import datetime
 import random
+import operator
 
 from osgeo import ogr, gdal
 import numpy as np
+import pandas as pd
 
 
 class Data(object, metaclass=ABCMeta):
@@ -118,13 +121,18 @@ class TemporalData(Data, metaclass=ABCMeta):
     timedelta = "D"
     resample_method = 'first'
     type = Data.DataType.TEMPORAL_DATA
+    first_datestamp = datetime.date(1, 1, 1)
 
-    def __init__(self, timedelta=None, resample_method=None, *args, **kwargs):
+    def __init__(
+            self, timedelta=None, resample_method=None, first_datestamp=None,
+            *args, **kwargs):
         super(TemporalData, self).__init__(*args, **kwargs)
         if timedelta is not None:
             self.timedelta = timedelta
         if resample_method is not None:
             self.resample_method = resample_method
+        if first_datestamp is not None:
+            self.first_datestamp = first_datestamp
 
     @abstractmethod
     def _data(self, x, y, start=None, end=None):
@@ -136,7 +144,8 @@ class TemporalData(Data, metaclass=ABCMeta):
             self._normalize(
                 self._convert_to_nans(
                     self._resample(
-                        self._data(x_offset, y_offset, start, end)
+                        self._data(x_offset, y_offset, start, end),
+                        start=start, end=end
                     )
                 )
             )
@@ -149,20 +158,105 @@ class TemporalData(Data, metaclass=ABCMeta):
             data = data.resample(
                 self.timedelta).agg(getattr(np, self.resample_method))
         if start is None and end is None:
-            return data.as_matrix()
+            return data.as_matrix().T
         else:
-            return data[start:end].as_matrix()
+            start = (
+                start if start > self.first_datestamp else self.first_datestamp
+            )
+            return data.reindex(
+                pd.DatetimeIndex(
+                    start=start,
+                    end=end,
+                    freq=self.timedelta
+                )
+            ).as_matrix().T
 
 
-class BaseData(TemporalData, metaclass=ABCMeta):
+class SelectorMixin(object):
+    OPERATORS = {
+        k: ("f", v) for k, v in (
+        ("/", operator.truediv),
+        ("*", operator.mul),
+        ("+", operator.add),
+        ("&", np.logical_and),
+        ("|", np.logical_or),
+        ("=", operator.eq),
+        (">", operator.gt),
+        ("<", operator.lt),
+        ("<=", operator.le),
+        (">=", operator.ge)
+    )}
+
+    def select(self, selection, dataframe):
+        if not selection:
+            return dataframe
+        columns = {c: ("v", dataframe[c]) for c in dataframe.columns.tolist()}
+        columns.update(self.OPERATORS)
+        selected = [
+            self._get_operator(x, columns) for x in
+            selection.replace("(", " ( ").replace(")", " ) ").split(' ') if x
+        ]
+        return dataframe[self._parse_selected_part(selected)]
+
+    def _parse_selected_part(self, selected_part):
+        if len(selected_part) == 1:
+            return selected_part[0][1]
+        leftmost_type, leftmost_argument = selected_part.pop(0)
+        if leftmost_type == 'f':
+            raise ValueError("Function without previous argument.")
+        if leftmost_type == 'b':
+            if leftmost_argument == ")":
+                raise ValueError("Brackets in wrong order.")
+            selected_part = self._parse_selected_part(
+                self._parse_brackets(selected_part)
+            )
+        if leftmost_type == 'v':
+            function_type, function_ = selected_part.pop(0)
+            assert function_type == 'f'
+            selected_part = function_(
+                leftmost_argument, self._parse_selected_part(selected_part))
+        return selected_part
+
+    def _parse_brackets(self, selected_part):
+        bracketscore = 1
+        between_brackets = []
+        while bracketscore > 0:
+            try:
+                leftmost_type, leftmost_argument = selected_part.pop(0)
+            except IndexError:
+                raise ValueError("Missing ending bracket.")
+            if leftmost_type == 'b':
+                if leftmost_argument == '(':
+                    bracketscore += 1
+                if leftmost_argument == ')':
+                    bracketscore -= 1
+            else:
+                between_brackets.append((leftmost_type, leftmost_argument))
+        return [
+                   ('v', self._parse_selected_part(between_brackets))
+               ] + selected_part
+
+    @staticmethod
+    def _get_operator(x, columns):
+        res = columns.get(x)
+        if res:
+            return res
+        try:
+            return 'v', float(x)
+        except:
+            return 'b', x
+
+
+class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
     data = None
 
     def __init__(
             self, seed=4177, train_percentage=70, validation_percentage=20,
-            test_percentage=10, *args, **kwargs):
+            test_percentage=10, selection="", *args, **kwargs):
         assert(
             test_percentage + validation_percentage + train_percentage == 100)
         super(BaseData, self).__init__(*args, **kwargs)
+        self.selection = selection
         self.seed = seed
         self._all_metadata = self._read_metadata()
         self._parts = {
@@ -174,16 +268,13 @@ class BaseData(TemporalData, metaclass=ABCMeta):
         self._iterator = None
 
     def _pct_to_index(self, from_pct, to_pct):
-        return slice(int(len(self) * from_pct / 100.0), int(len(self) *
-                                                            to_pct / 100.0))
+        return slice(
+            int(len(self) * from_pct / 100.0), int(len(self) * to_pct / 100.0)
+        )
 
     @abstractmethod
     def _data(self, slice_):
         yield
-
-    @abstractmethod
-    def _unpack(self, metadata, data):
-        return 0, 0, 0, metadata, data
 
     @abstractmethod
     def _read_metadata(self):
@@ -197,18 +288,16 @@ class BaseData(TemporalData, metaclass=ABCMeta):
 
     def __next__(self):
         if self._iterator is not None:
-            x, y, z, metadata, dataframe = self._unpack(*next(self._iterator))
-            start = dataframe.index[0].to_pydatetime()
-            end = dataframe.index[-1].to_pydatetime()
-            return x, y, z, start, end, metadata, self._convert_nan(
-                self._normalize(
-                    self._convert_to_nans(
-                        self._resample(
-                            dataframe
-                        )
-                    )
-                )
-            )
+            x, y, z, meta_row, metadata, dataframe = next(self._iterator)
+            start = meta_row.start.to_pydatetime().date()
+            end = meta_row.end.to_pydatetime().date()
+            return (
+                x, y, z, start, end, metadata,
+                self._convert_nan(
+                    self._normalize(
+                        self._convert_to_nans(
+                            self._resample(dataframe, start, end)
+                        ))))
         raise StopIteration
 
     def __call__(self, part):
