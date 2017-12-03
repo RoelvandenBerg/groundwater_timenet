@@ -62,7 +62,7 @@ class DrinkingWater(SpatialRasterData):
         'DANK006_drinkwater',
         'DANK006_drinkwater.tif'
     )
-    classes = {"drinkingwater": [0, 200, 400, 600, 800, 65535]}
+    classes = {"drinkingwater": [0, 100, 200, 400, 600, 800, 65535]}
 
     def _normalize(self, data):
         return self.classify("drinkingwater", data)
