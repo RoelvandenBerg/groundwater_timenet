@@ -31,7 +31,7 @@ levels.
 - [X] cache data in hdf5 files for faster performance
 - [X] normalize data based on data exploration
 - [X] make sure temporal dimensions match
-- [ ] create one / multiple cached file with all normalized data
+- [X] create one / multiple cached file with all normalized data
 ##### build a neural network with Keras / Tensorflow:
 - [ ] Wavenet atrous CNN architecture
 - [ ] LTSM architecture
