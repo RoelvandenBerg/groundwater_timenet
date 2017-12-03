@@ -96,7 +96,7 @@ class Combiner(object):
             meta.append(self.meta_data(base_metadata, x, y, z))
             if not (i + 1) % self.chunk_size and i != 0:
                 filepath = os.path.join(
-                    "var", "data", "neuralnet", part, str(i) + ".h5")
+                    "var", "data", "neuralnet", part, str(i + 1) + ".h5")
                 utils.store_h5(
                     data=base + temporal + meta,
                     dataset_name=self.dataset_name,
@@ -105,7 +105,7 @@ class Combiner(object):
                 )
                 logger.info(
                     "Combined %d series in total. Wrote %d to file %s.",
-                    i, self.chunk_size, filepath)
+                    i + 1, self.chunk_size, filepath)
                 temporal = []
                 meta = []
                 base = []
