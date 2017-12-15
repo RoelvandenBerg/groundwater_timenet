@@ -47,7 +47,7 @@ class Combiner(object):
     )
 
     def __init__(
-            self, timestep="15day", resample_method='first',
+            self, timestep="halfmonthly", resample_method='first',
             first_datestamp=FIRST_DATESTAMP, chunk_size=1000,
             selection=DEFAULT_SELECTION, *args, **kwargs):
         self.chunk_size = chunk_size

@@ -222,14 +222,6 @@ def try_h5(fn, d=None):
         return fn
 
 
-def tryfloat(f):
-    try:
-        return float(f)
-    except (ValueError, TypeError):
-        pass
-    return 0.0
-
-
 def _get_raster_filenames(rootdir, raise_errors, dataset_name=None):
     files = sorted(
         [
