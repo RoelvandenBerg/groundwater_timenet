@@ -83,7 +83,7 @@ class Combiner(object):
                 data.data(x, y, start, end)
                 for data in self._temporal_data
             ]
-        return np.vstack(temporal_data)
+        return np.hstack(temporal_data)
 
     def combine(self, part):
         temporal = []

@@ -1,0 +1,11 @@
+h5py
+ipython
+keras
+netCDF4
+numpy
+gdal
+owslib
+pandas
+requests
+suds-py3
+tensorflow

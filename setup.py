@@ -17,7 +17,7 @@ install_requires = [
     'keras',
     'netCDF4',
     'numpy',
-    'osgeo',
+    'gdal',
     'owslib',
     'pandas',
     'requests',

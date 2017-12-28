@@ -5,16 +5,13 @@ from collections import Generator
 import numpy as np
 
 from groundwater_timenet import utils
-
-# TODO: these sizes can be determined, for now we assume them constant:
-META_SIZE = 212
-TEMPORAL_SIZE = 7
-
+from groundwater_timenet.learn.constants import *
 
 class ConvolutionalAtrousGenerator(Generator):
 
     def __init__(self, base="neuralnet", data_type="train", batch_size=1000,
-                 chunk_size=1000, before_size=24, after_size=1):
+                 chunk_size=1000, input_size=INPUT_SIZE,
+                 output_size=OUTPUT_SIZE):
         directory = os.path.join(utils.DATA, base, data_type)
         self.h5files = [
             os.path.join(directory, f) for f in os.listdir(directory)

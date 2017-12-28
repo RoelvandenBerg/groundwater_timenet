@@ -172,9 +172,11 @@ class DinoData(BaseData):
         return zeros
 
     def metadata_array(self, row, filtercodes):
-        return np.concatenate(
+        return self._nan_to_num(
+            np.concatenate(
                 [self._filtercode(row.filtercode, filtercodes), np.array(
                     [row[meta] for meta in self.relevant_meta])]
+            )
         )
 
     def _normalize(self, data):
