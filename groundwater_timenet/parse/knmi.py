@@ -134,7 +134,7 @@ class KnmiData(TemporalData, metaclass=ABCMeta):
         )
         index = pd.DatetimeIndex(
             pd.Timestamp(y, m, d) for y, m, d in timestamps)
-        return pd.DataFrame(self._convert_nan(data), index=index)
+        return pd.DataFrame(self._nan_to_num(data), index=index)
 
     def _data(self, x, y, start=None, end=None, *args, **kwargs):
         return self._dataframe(x, y)

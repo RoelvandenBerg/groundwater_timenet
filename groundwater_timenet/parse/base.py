@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractproperty, abstractmethod
+from abc import ABCMeta, abstractmethod
 import datetime
 import random
 import operator
@@ -17,8 +17,8 @@ class Data(object, metaclass=ABCMeta):
     nan = None
     classes = {}
 
-    def __init__(self, convert_nan=np.nan_to_num, *args, **kwargs):
-        self._convert_nan = convert_nan
+    def __init__(self, nan_to_num=np.nan_to_num, *args, **kwargs):
+        self._nan_to_num = nan_to_num
 
     def classify(self, class_type, class_name):
         classes = self.classes[class_type]
@@ -26,11 +26,13 @@ class Data(object, metaclass=ABCMeta):
         zeros[classes.index(class_name)] = 1
         return zeros
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def root(self):
         return ""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def type(self):
         return Data.DataType.BASE
 
@@ -47,7 +49,7 @@ class Data(object, metaclass=ABCMeta):
 
     def data(self, x, y, z=0):
         x_offset, y_offset = self._transform(x, y)
-        return self._convert_nan(
+        return self._nan_to_num(
             self._normalize(
                 self._convert_to_nans(
                     self._data(x_offset, y_offset, z)
@@ -68,11 +70,13 @@ class Data(object, metaclass=ABCMeta):
 
 class SpatialVectorData(Data, metaclass=ABCMeta):
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def spatial_source_filepath(self):
         return ""
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def spatial_driver(self):
         return ""
 
@@ -99,7 +103,8 @@ class SpatialVectorData(Data, metaclass=ABCMeta):
 
 class SpatialRasterData(Data, metaclass=ABCMeta):
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def spatial_source_filepath(self):
         return ""
 
@@ -140,7 +145,7 @@ class TemporalData(Data, metaclass=ABCMeta):
 
     def data(self, x, y, start=None, end=None):
         x_offset, y_offset = self._transform(x, y)
-        return self._convert_nan(
+        return self._nan_to_num(
             self._normalize(
                 self._convert_to_nans(
                     self._resample(
@@ -169,23 +174,29 @@ class TemporalData(Data, metaclass=ABCMeta):
                     end=end,
                     freq=self.timedelta
                 )
-            ).as_matrix().T
+            ).as_matrix()
 
 
 class SelectorMixin(object):
+    """
+    WARNING: This is an incomplete implementation without a correct resolution
+    order and needs all expressions to be wrapped in brackets.
+    TODO: eventually remove or fix this.
+    """
     OPERATORS = {
         k: ("f", v) for k, v in (
-        ("/", operator.truediv),
-        ("*", operator.mul),
-        ("+", operator.add),
-        ("&", np.logical_and),
-        ("|", np.logical_or),
-        ("=", operator.eq),
-        (">", operator.gt),
-        ("<", operator.lt),
-        ("<=", operator.le),
-        (">=", operator.ge)
-    )}
+            ("/", operator.truediv),
+            ("*", operator.mul),
+            ("+", operator.add),
+            ("&", np.logical_and),
+            ("|", np.logical_or),
+            ("=", operator.eq),
+            (">", operator.gt),
+            ("<", operator.lt),
+            ("<=", operator.le),
+            (">=", operator.ge)
+        )
+    }
 
     def select(self, selection, dataframe):
         if not selection:
@@ -293,7 +304,7 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
             end = meta_row.end.to_pydatetime().date()
             return (
                 x, y, z, start, end, metadata,
-                self._convert_nan(
+                self._nan_to_num(
                     self._normalize(
                         self._convert_to_nans(
                             self._resample(dataframe, start, end)
@@ -304,5 +315,3 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
         random.seed(self.seed)
         self._iterator = iter(self._data(self._parts[part]))
         return iter(self)
-
-
