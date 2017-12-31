@@ -33,7 +33,7 @@ levels.
 - [X] make sure temporal dimensions match
 - [X] create one / multiple cached file with all normalized data
 ##### build a neural network with Keras / Tensorflow:
-- [ ] Wavenet atrous CNN architecture
+- [ ] Simplified wavenet-like atrous CNN architecture
 - [ ] LTSM architecture
 - [ ] combine / try out different combinations
 - [ ] reiterate...
