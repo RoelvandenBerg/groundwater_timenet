@@ -43,7 +43,7 @@ class GeotopData(Data):
     root = "geotop"
     type = Data.DataType.METADATA
     nan = -127
-    EMPTY = np.zeros(1)
+    EMPTY = np.zeros(66)
 
     def __init__(self, filename='geotop.nc', *args, **kwargs):
         super(GeotopData, self).__init__(*args, **kwargs)
