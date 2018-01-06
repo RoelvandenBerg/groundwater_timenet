@@ -1,9 +1,10 @@
 import unittest
+import random
 
 import numpy as np
 
-from .parse.combine import Combiner
-from .learn.generator import ConvolutionalAtrousGenerator
+from .parse.combine import Combiner, UncompressedCombiner
+from .learn.generator import CompressedConvolutionalAtrousGenerator
 
 # TODO: write more tests.
 
@@ -21,6 +22,22 @@ class CombinerTestCase(unittest.TestCase):
                 np.isnan(c.temporal_data(base_data, x, y, start, end)).any())
             self.assertFalse(
                 np.isnan(c.meta_data(base_metadata, x, y, z)).any())
+
+    def test_(self):
+        c = UncompressedCombiner()
+        end = random.randint(3, len(c._base_data))
+        c._base_data._parts['testrun'] = slice(end - 3, end)
+        for j, params in enumerate(c._base_data('testrun')):
+            x, y, z, start, end, base_metadata, base = params
+            temporal = c.temporal_data(base, x, y, start, end)
+            meta = c.meta_data(base_metadata, x, y, z)
+            self.assertEqual(temporal.shape[1], c.generator.temporal_size)
+            self.assertEqual(base.shape[1], 1)
+            self.assertEqual(meta.shape[0], c.generator.meta_size)
+            self.assertEqual(temporal.shape[0], base.shape[0])
+            self.assertEqual(len(temporal.shape), 2)
+            self.assertEqual(len(base.shape), 2)
+            self.assertEqual(len(meta.shape), 1)
 
 
 class GeneratorTestCase(unittest.TestCase):
@@ -88,7 +105,7 @@ class GeneratorTestCase(unittest.TestCase):
     )
 
     def setUp(self):
-        self.gen = ConvolutionalAtrousGenerator(
+        self.gen = CompressedConvolutionalAtrousGenerator(
             input_size=5,
             output_size=1,
             temporal_size=2,
@@ -152,6 +169,8 @@ class GeneratorTestCase(unittest.TestCase):
             [[0], [0], [0], [0], [1]]
         ])
         self.assertTrue((expected_input == input).all())
+        print(expected_output, output)
+        print(expected_output.shape, output.shape)
         self.assertTrue((expected_output == output).all())
 
 

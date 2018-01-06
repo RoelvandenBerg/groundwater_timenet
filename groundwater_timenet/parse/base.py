@@ -271,6 +271,7 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
         self.seed = seed
         self._all_metadata = self._read_metadata()
         self._parts = {
+            "all": slice(None),
             "train": self._pct_to_index(0, train_percentage),
             "validation": self._pct_to_index(
                 train_percentage, validation_percentage),

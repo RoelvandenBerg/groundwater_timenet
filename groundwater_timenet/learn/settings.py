@@ -1,6 +1,8 @@
+CHUNK_SIZE = 50
+
 CONVOLUTIONAL_MODEL_FILEPATH = (
     'var/data/models/conv_model_{datetime_start}-{datetime_end}.h5')
-EPOCHS = 10
+EPOCHS = 1  # 0
 
 # TODO: these sizes can be determined, for now we assume them constant:
 # These are the sizes of the network

@@ -1,63 +1,78 @@
+import datetime
+
 from keras.models import Sequential
-from keras.layers import Input, Conv1D, Dense, Add, Multiply
+from keras.layers import Conv1D, MaxPooling1D
 from keras.callbacks import EarlyStopping, TensorBoard
-from groundwater_timenet.learn.constants import *
 
-# If you have installed TensorFlow with pip, you should be able to launch TensorBoard from the command line:
-# tensorboard --logdir=/full_path_to_your_logs
+from groundwater_timenet.learn.settings import *
+from groundwater_timenet.learn.generator import ConvolutionalAtrousGenerator
 
 
-def create_model(filters, kernel_size, layer_dilation=CONVOLUTIONAL_LAYER_DILATION,
-                 defaults=CONVOLUTIONAL_LAYER_DEFAULTS, input_shape=()):
-    # todo: how to choose the filters and kernel_size?
-    # Probably: 365 or 366 (a year of data / a year of data + 1)
-    # kernel_size should be a day I guess? (1, ..) SEE: http://sergeiturukin.com/2017/03/02/wavenet.html
-    # TODO: apart from this model also add a metadata layer and merge (Keras merge layer) these with the same shape on the first (and/or last?) conv layer.
+def create_model(
+        input_size=INPUT_SIZE, temporal_size=TEMPORAL_SIZE,
+        meta_size=META_SIZE, layer_dilation=CONVOLUTIONAL_LAYER_DILATION,
+        defaults=CONVOLUTIONAL_LAYER_DEFAULTS):
+    # TODO: perhaps a merge layer will also be a good idea instead of repeating
+    # the metadata.
     model = Sequential()
-    defaults['input_shape'] = input_shape
-
-    temporal_input = Input(shape=(TEMPORAL_SIZE, INPUT_SIZE))
-    metadata_input = Input(shape=(1, META_SIZE))
-    temporal_layer = Conv1D(
-        filters,
-        kernel_size,
-        dilation_rate=1,
+    # first layer collects all metadata
+    layer = Conv1D(
+        filters=input_size,
+        kernel_size=temporal_size + meta_size,
+        input_shape=(input_size, temporal_size + meta_size),
+        dilation_rate=layer_dilation[0],
         **defaults
-    )(temporal_input)
-    metadata_layer = Dense(META_SIZE, activation='relu')(metadata_input)
-
-    model.
-    for dilation_rate in layer_dilation:
+    )
+    model.add(layer)
+    for dilation_rate in layer_dilation[1:]:
         layer = Conv1D(
-            filters,
-            kernel_size,
+            filters=input_size,
+            kernel_size=temporal_size + meta_size,
             dilation_rate=dilation_rate,
             **defaults
         )
-        if 'input_shape' in defaults:
-            del defaults['input_shape']
         model.add(layer)
-    # todo: what about the input and last layer?
+    # last layer outputs only the input shape
+    layer = MaxPooling1D(
+        pool_size=input_size,
+    )
+    model.add(layer)
     return model
 
 
 def main():
-    filters = None
-    kernel_size = None
-    input_shape = None
-    model = create_model(filters, kernel_size, input_shape=input_shape)
+    start = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    model = create_model()
 
-    EarlyStopping(monitor='val_loss',
-                                  min_delta=0,
-                                  patience=0,
-                                  verbose=0, mode='auto')
-    TensorBoard(log_dir='./logs', histogram_freq=0,
-                                batch_size=32, write_graph=True,
-                                write_grads=False, write_images=False,
-                                embeddings_freq=0, embeddings_layer_names=None,
-                                embeddings_metadata=None)
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        min_delta=0,
+        patience=0,
+        verbose=0,
+        mode='auto')
+    tensor_board = TensorBoard(
+        log_dir='./var/log/tensorboard',
+        histogram_freq=0,
+        batch_size=32,
+        write_graph=True,
+        write_grads=False,
+        write_images=False,
+        embeddings_freq=0,
+        embeddings_layer_names=None,
+        embeddings_metadata=None)
 
-    model.compile(loss='rmsprop', optimizer='sgd')
-    #TODO: https://keras.io/models/sequential/#fit_generator
-    model.fit_generator()
+    model.compile(loss='mean_squared_error', optimizer='rmsprop')
+    generator = ConvolutionalAtrousGenerator()
 
+    # If you have installed TensorFlow with pip, you should be able to
+    # launch TensorBoard from the command line:
+    # tensorboard --logdir=/full_path_to_your_logs
+
+    model.fit_generator(
+        generator,
+        epochs=EPOCHS,
+        callbacks=[early_stopping, tensor_board]
+    )
+    end = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+    model.save(CONVOLUTIONAL_MODEL_FILEPATH.format(
+        datetime_start=start, datetime_end=end))
