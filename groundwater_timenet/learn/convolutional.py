@@ -1,4 +1,5 @@
 import datetime
+import os
 
 from keras.models import Sequential
 from keras.layers import Conv1D, MaxPooling1D
@@ -41,6 +42,10 @@ def create_model(
 
 
 def main():
+    try:
+        os.makedirs(CONVOLUTIONAL_MODEL_FILEPATH)
+    except FileExistsError:
+        pass
     start = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     model = create_model()
 
