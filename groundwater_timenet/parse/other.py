@@ -2,6 +2,7 @@ import os
 
 import numpy as np
 
+import groundwater_timenet.geo_utils
 from groundwater_timenet import utils
 from groundwater_timenet.parse.base import SpatialVectorData, SpatialRasterData
 
@@ -23,7 +24,7 @@ class Bofek(SpatialVectorData):
         self.empty = np.zeros(len(self.classes['bofek']))
 
     def _data(self, x, y, z=0, *args, **kwargs):
-        point = utils.point(x, y)
+        point = groundwater_timenet.geo_utils.point(x, y)
         try:
             return self._layer_data("BOFEK2012", point)[0]
         except IndexError:
@@ -48,7 +49,7 @@ class Irrigation(SpatialVectorData):
     bbox_buffer = 1000
 
     def _data(self, x, y, z=0, *args, **kwargs):
-        bbox = utils.bbox2polygon(
+        bbox = groundwater_timenet.geo_utils.bbox2polygon(
             x - self.bbox_buffer,
             y - self.bbox_buffer,
             x + self.bbox_buffer,

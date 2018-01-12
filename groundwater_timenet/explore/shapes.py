@@ -11,12 +11,9 @@ import numpy as np
 import pandas as pd
 
 import groundwater_timenet.utils
-from groundwater_timenet.utils import sliding_geom_window
 from groundwater_timenet.utils import mkdirs
-from groundwater_timenet.utils import bbox2polygon
-from groundwater_timenet.utils import point
 from groundwater_timenet.utils import cache_h5
-from groundwater_timenet.utils import transform
+from groundwater_timenet.geo_utils import transform, point, bbox2polygon, sliding_geom_window
 from groundwater_timenet.parse import dino
 from groundwater_timenet.parse import knmi
 

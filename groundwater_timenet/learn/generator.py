@@ -17,8 +17,8 @@ class BaseGenerator(Generator):
     def __init__(self, base="neuralnet", data_type="train", batch_size=1000,
                  chunk_size=CHUNK_SIZE, meta_size=META_SIZE,
                  temporal_size=TEMPORAL_SIZE, input_size=INPUT_SIZE,
-                 output_size=OUTPUT_SIZE):
-        directory = os.path.join(utils.DATA, base, data_type)
+                 output_size=OUTPUT_SIZE, directory=None):
+        directory = directory or os.path.join(utils.DATA, base, data_type)
         self.__length = None
         self.h5files = [
             os.path.join(directory, f) for f in os.listdir(directory)

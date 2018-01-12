@@ -8,4 +8,4 @@ owslib
 pandas
 requests
 suds-py3
-tensorflow
+# tensorflow  # This is actually a requirement, but left out so you can pick which is best for your system (cpu or gpu)

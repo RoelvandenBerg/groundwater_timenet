@@ -8,6 +8,7 @@ from osgeo import ogr
 from owslib.wfs import WebFeatureService
 from suds.client import Client as SoapClient
 
+import groundwater_timenet.geo_utils
 from groundwater_timenet import utils
 
 
@@ -136,7 +137,7 @@ def load_dino_grid_cell(features):
 
 def load_dino_groundwater(skip=0, url=WFS_URL, layer_name=WFS_LAYER_NAME):
     wfs = WebFeatureService(url=url, version='2.0.0')
-    sliding_window = utils.sliding_geom_window('NederlandRegion.json')
+    sliding_window = groundwater_timenet.geo_utils.sliding_geom_window('NederlandRegion.json')
     [next(sliding_window) for _ in range(skip)]
     for minx, miny, maxx, maxy in sliding_window:
         features = get_features(wfs, layer_name, minx, miny, maxx, maxy)

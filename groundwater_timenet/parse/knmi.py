@@ -7,6 +7,7 @@ import numpy as np
 import osr
 import pandas as pd
 
+import groundwater_timenet.geo_utils
 from groundwater_timenet import utils
 from groundwater_timenet.parse.base import TemporalData
 
@@ -83,12 +84,12 @@ class WeatherStationData(TemporalData):
         if relevant_columns is None:
             relevant_columns = self.RAIN_HEADERS + self.EVAP_HEADERS
         self.relevant_columns = [1] + relevant_columns
-        self.geoms = utils.multipoint(
+        self.geoms = groundwater_timenet.geo_utils.multipoint(
             (v[0], v[1]) for _, v in self.STATION_META)
-        utils.transform(self.geoms)
+        groundwater_timenet.geo_utils.transform(self.geoms)
 
     def closest(self, x, y):
-        i = utils.closest_point(x, y, self.geoms)
+        i = groundwater_timenet.geo_utils.closest_point(x, y, self.geoms)
         return self.STATION_META[i]
 
     def _dataframe(self, metadata):

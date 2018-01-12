@@ -1,5 +1,5 @@
 import datetime
-import os
+import sys
 
 from keras.models import Sequential
 from keras.layers import Conv1D, MaxPooling1D
@@ -41,7 +41,7 @@ def create_model(
     return model
 
 
-def main():
+def main(directory=None, epochs=EPOCHS):
     try:
         os.makedirs(CONVOLUTIONAL_MODEL_FILEPATH)
     except FileExistsError:
@@ -56,7 +56,7 @@ def main():
         verbose=0,
         mode='auto')
     tensor_board = TensorBoard(
-        log_dir='./var/log/tensorboard',
+        log_dir=os.path.join('.', 'var', 'log', 'tensorboard'),
         histogram_freq=0,
         batch_size=32,
         write_graph=True,
@@ -67,7 +67,7 @@ def main():
         embeddings_metadata=None)
 
     model.compile(loss='mean_squared_error', optimizer='rmsprop')
-    generator = ConvolutionalAtrousGenerator()
+    generator = ConvolutionalAtrousGenerator(directory=directory)
 
     # If you have installed TensorFlow with pip, you should be able to
     # launch TensorBoard from the command line:
@@ -75,9 +75,17 @@ def main():
 
     model.fit_generator(
         generator,
-        epochs=EPOCHS,
+        epochs=epochs,
         callbacks=[early_stopping, tensor_board]
     )
     end = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     model.save(CONVOLUTIONAL_MODEL_FILEPATH.format(
         datetime_start=start, datetime_end=end))
+
+
+if __name__ == "__main__":
+    try:
+        directory = sys.argv[0]
+        main(directory)
+    except IndexError:
+        main()
