@@ -5,6 +5,7 @@ CHUNK_SIZE = 50
 
 CONVOLUTIONAL_MODEL_FILEPATH = os.path.join(
     'var', 'data', 'models', 'conv_model_{datetime_start}-{datetime_end}.h5')
+TENSORBOARD_FILEPATH = os.path.join('var', 'log', 'tensorboard')
 EPOCHS = 1  # 0
 
 # TODO: these sizes can be determined, for now we assume them constant:

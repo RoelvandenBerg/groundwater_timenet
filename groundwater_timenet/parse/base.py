@@ -190,7 +190,7 @@ class SelectorMixin(object):
             ("+", operator.add),
             ("&", np.logical_and),
             ("|", np.logical_or),
-            ("=", operator.eq),
+            ("==", operator.eq),
             (">", operator.gt),
             ("<", operator.lt),
             ("<=", operator.le),
@@ -207,7 +207,9 @@ class SelectorMixin(object):
             self._get_operator(x, columns) for x in
             selection.replace("(", " ( ").replace(")", " ) ").split(' ') if x
         ]
-        return dataframe[self._parse_selected_part(selected)]
+        res = dataframe[self._parse_selected_part(selected)]
+        # TODO: fix hardcoded filterselection.
+        return res[res.filtercode == '001']
 
     def _parse_selected_part(self, selected_part):
         if len(selected_part) == 1:

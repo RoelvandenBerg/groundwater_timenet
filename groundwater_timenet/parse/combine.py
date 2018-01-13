@@ -31,12 +31,12 @@ class Combiner(object):
     http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     """
     timedeltas = {
-        'hour': "H",
-        'day': "D",
-        'week': "W",
-        'month': "M",
-        'halfmonthly': "SM",
-        '15day': '15D'
+        'hour': ("H", datetime.timedelta(hours=1)),
+        'day': ("D", datetime.timedelta(days=1)),
+        'week': ("W", datetime.timedelta(days=7)),
+        'month': ("M", datetime.timedelta(days=30, hours=12)),
+        'halfmonthly': ("SM", datetime.timedelta(days=15)),
+        '15day': ("15D", datetime.timedelta(days=15)),
     }
     data_sources = (
         DinoData,
@@ -54,9 +54,10 @@ class Combiner(object):
             first_datestamp=FIRST_DATESTAMP, chunk_size=1000,
             selection=DEFAULT_SELECTION, *args, **kwargs):
         self.chunk_size = chunk_size
-        self.timestep = self.timedeltas.get(timestep, timestep)
-        self._meta_data = [metadata(*args, **kwargs)  for metadata in
-                         self._filter_source(Data.DataType.METADATA)]
+        self.timestep = self.timedeltas.get(timestep, timestep)[0]
+        self.temporal_shift = self.timedeltas.get(timestep, timestep)[1]
+        self._meta_data = [metadata(*args, **kwargs) for metadata in
+                           self._filter_source(Data.DataType.METADATA)]
         self._temporal_data = [
             temporal(
                 timedelta=self.timestep, resample_method=resample_method,
@@ -82,7 +83,8 @@ class Combiner(object):
             [base] + [metadata.data(x, y, z) for metadata in self._meta_data])
 
     def temporal_data(self, base, x, y, start, end):
-        temporal_data = [base] + [
+        start += self.temporal_shift
+        temporal_data = [base[:-1]] + [
                 data.data(x, y, start, end)
                 for data in self._temporal_data
             ]
@@ -94,8 +96,9 @@ class Combiner(object):
         base = []
         for i, params in enumerate(self._base_data(part)):
             x, y, z, start, end, base_metadata, base_data = params
-            base.append(base_data)
-            temporal.append(self.temporal_data(base_data, x, y, start, end))
+            base.append(base_data[1:])
+            temporal.append(
+                self.temporal_data(base_data, x, y, start, end))
             meta.append(self.meta_data(base_metadata, x, y, z))
             if not (i + 1) % self.chunk_size and i != 0:
                 filepath = os.path.join(
@@ -141,7 +144,7 @@ class UncompressedCombiner(Combiner):
             x, y, z, start, end, base_metadata, base = params
             temporal = self.temporal_data(base, x, y, start, end)
             meta = self.meta_data(base_metadata, x, y, z)
-            if not self.generator.generate_batch(base, meta, temporal):
+            if not self.generator.generate_batch(base[1:], meta, temporal):
                 logger.warn('Empty series at position %d', i)
                 continue
             logger.info("Packed series #%d. At: %d" % (j, round(

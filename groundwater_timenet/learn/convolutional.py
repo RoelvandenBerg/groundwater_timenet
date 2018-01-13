@@ -42,13 +42,18 @@ def create_model(
 
 
 def main(directory=None, epochs=EPOCHS):
+    start = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+
     try:
         os.makedirs(CONVOLUTIONAL_MODEL_FILEPATH)
     except FileExistsError:
         pass
-    start = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
-    model = create_model()
+    try:
+        os.makedirs(os.path.join(TENSORBOARD_FILEPATH, start))
+    except FileExistsError:
+        pass
 
+    model = create_model()
     early_stopping = EarlyStopping(
         monitor='val_loss',
         min_delta=0,
@@ -57,7 +62,7 @@ def main(directory=None, epochs=EPOCHS):
         mode='auto')
     tensor_board = TensorBoard(
         log_dir=os.path.join('.', 'var', 'log', 'tensorboard'),
-        histogram_freq=0,
+        histogram_freq=0.01,
         batch_size=32,
         write_graph=True,
         write_grads=False,
@@ -66,18 +71,26 @@ def main(directory=None, epochs=EPOCHS):
         embeddings_layer_names=None,
         embeddings_metadata=None)
 
-    model.compile(loss='mean_squared_error', optimizer='rmsprop')
+    model.compile(
+        loss='mean_squared_error',
+        optimizer='rmsprop',
+        metrics=['accuracy', 'loss', 'val_loss']
+    )
     generator = ConvolutionalAtrousGenerator(directory=directory)
 
     # If you have installed TensorFlow with pip, you should be able to
     # launch TensorBoard from the command line:
     # tensorboard --logdir=/full_path_to_your_logs
 
-    model.fit_generator(
+    history = model.fit_generator(
         generator,
         epochs=epochs,
         callbacks=[early_stopping, tensor_board]
     )
+
+    with open(os.path.join(TENSORBOARD_FILEPATH, start, 'history'), 'wb') as f:
+        f.write(history)
+
     end = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     model.save(CONVOLUTIONAL_MODEL_FILEPATH.format(
         datetime_start=start, datetime_end=end))

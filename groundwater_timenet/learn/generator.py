@@ -20,10 +20,17 @@ class BaseGenerator(Generator):
                  output_size=OUTPUT_SIZE, directory=None):
         directory = directory or os.path.join(utils.DATA, base, data_type)
         self.__length = None
-        self.h5files = [
-            os.path.join(directory, f) for f in os.listdir(directory)
-            if f.endswith('.h5')
-        ]
+        try:
+            self.h5files = [
+                os.path.join(directory, f) for f in os.listdir(directory)
+                if f.endswith('.h5')
+            ]
+        except FileNotFoundError:
+            logger.warn(
+                "Neuralnet training directory %s cannot be found. "
+                "Generator cannot be stored.", directory
+            )
+            self.h5files = []
         self.meta_size = meta_size
         self.temporal_size = temporal_size
         self.input_size = input_size
@@ -43,6 +50,15 @@ class BaseGenerator(Generator):
     def generate_batch(self, base_data, meta_data, temporal_data):
         take = base_data != 0
         if take.sum() <= self.input_size:
+            logger.debug('')
+            return False
+        temporal = self.rolling_dataset(
+            dataset=temporal_data[take.flatten()],
+            period_length=self.input_size,
+            cutoff=self.output_size,
+        )
+        take_rolled = (temporal[:, :, 0] != 0).all(axis=1)
+        if not take_rolled.any():
             return False
         condense_base = self.rolling_dataset(
             dataset=base_data[take],
@@ -59,12 +75,8 @@ class BaseGenerator(Generator):
         except ValueError as e:
             logger.warn('Failed %s', e)
             return False
-        temporal = self.rolling_dataset(
-            dataset=temporal_data[take.flatten()],
-            period_length=self.input_size,
-            cutoff=self.output_size,
-        )
-        self.pack(base, meta_data, temporal)
+        self.pack(
+            base[take_rolled], meta_data, temporal[take_rolled])
         return True
 
     def empty_input_output(self):
