@@ -8,6 +8,7 @@ import os
 import h5py
 import numpy as np
 
+LEARN_LOG = os.path.join('var', 'log', 'learn.log')
 PARSE_LOG = os.path.join('var', 'log', 'parse.log')
 HARVEST_LOG = os.path.join('var', 'log', 'harvest.log')
 DATA = os.path.join('var', 'data')

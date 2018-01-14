@@ -1,12 +1,19 @@
 import datetime
 import sys
+import pickle
 
+import matplotlib.pyplot as plt
+from keras import metrics
 from keras.models import Sequential
 from keras.layers import Conv1D, MaxPooling1D
-from keras.callbacks import EarlyStopping, TensorBoard
+from keras.callbacks import EarlyStopping, TensorBoard, ReduceLROnPlateau
 
 from groundwater_timenet.learn.settings import *
 from groundwater_timenet.learn.generator import ConvolutionalAtrousGenerator
+from groundwater_timenet.utils import setup_logging, LEARN_LOG
+
+
+logger = setup_logging(__name__, LEARN_LOG, "INFO")
 
 
 def create_model(
@@ -41,6 +48,27 @@ def create_model(
     return model
 
 
+def plot_history(history):
+    """taken from:  https://machinelearningmastery.com/display-deep-learning-model-training-history-in-keras/"""
+    logger.debug(history.history.keys())
+    # summarize history for accuracy
+    plt.plot(history.history['acc'])
+    plt.plot(history.history['val_acc'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+    # summarize history for loss
+    plt.plot(history.history['loss'])
+    plt.plot(history.history['val_loss'])
+    plt.title('model loss')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='upper left')
+    plt.show()
+
+
 def main(directory=None, epochs=EPOCHS):
     start = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
@@ -61,35 +89,31 @@ def main(directory=None, epochs=EPOCHS):
         verbose=0,
         mode='auto')
     tensor_board = TensorBoard(
-        log_dir=os.path.join('.', 'var', 'log', 'tensorboard'),
-        histogram_freq=0.01,
-        batch_size=32,
-        write_graph=True,
-        write_grads=False,
-        write_images=False,
-        embeddings_freq=0,
-        embeddings_layer_names=None,
-        embeddings_metadata=None)
+        log_dir=os.path.join('.', 'var', 'log', 'tensorboard'))
 
     model.compile(
         loss='mean_squared_error',
         optimizer='rmsprop',
-        metrics=['accuracy', 'loss', 'val_loss']
+        metrics=['accuracy', metrics.mae]
     )
-    generator = ConvolutionalAtrousGenerator(directory=directory)
+    train_generator = ConvolutionalAtrousGenerator(directory=os.path.join(directory, 'train'))
+    validation_generator = ConvolutionalAtrousGenerator(directory=os.path.join(directory, 'validation'))
 
     # If you have installed TensorFlow with pip, you should be able to
     # launch TensorBoard from the command line:
     # tensorboard --logdir=/full_path_to_your_logs
 
     history = model.fit_generator(
-        generator,
+        train_generator,
+        validation_data=validation_generator,
         epochs=epochs,
-        callbacks=[early_stopping, tensor_board]
+        callbacks=[early_stopping, tensor_board, ReduceLROnPlateau()]
     )
 
-    with open(os.path.join(TENSORBOARD_FILEPATH, start, 'history'), 'wb') as f:
-        f.write(history)
+    plot_history(history)
+    with open(os.path.join(TENSORBOARD_FILEPATH, start, 'history.csv'), 'w') as p:
+        for metric in history.params['metrics']:
+            p.write(','.join([metric] + [str(h) for h in history.history[metric]]) + '\n')
 
     end = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
     model.save(CONVOLUTIONAL_MODEL_FILEPATH.format(
