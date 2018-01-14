@@ -136,6 +136,7 @@ class DinoData(BaseData):
         metadata_sorted = self.select(
             self.selection, self._all_metadata[slice_]
         ).copy().sort_values(by="days", ascending=False)
+        self._length = len(metadata_sorted)
         filtercodes = {
             s: i for i, s in enumerate(sorted(set(metadata_sorted.filtercode)))
         }
@@ -156,6 +157,8 @@ class DinoData(BaseData):
             )
             yield row.x, row.y, z, row, self.metadata_array(
                 row, filtercodes), dataframe
+            self._length -= 1
+        self._length = None
 
     def _to_date(self, date):
         datestr = str(date)

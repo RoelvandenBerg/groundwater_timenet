@@ -1,6 +1,6 @@
-import datetime
-import os
 from itertools import chain
+import datetime
+import time
 
 import numpy as np
 
@@ -49,6 +49,7 @@ class Combiner(object):
         DrinkingWater
     )
 
+    # TODO: change to '15day'?
     def __init__(
             self, timestep="halfmonthly", resample_method='first',
             first_datestamp=FIRST_DATESTAMP, chunk_size=1000,
@@ -84,10 +85,12 @@ class Combiner(object):
 
     def temporal_data(self, base, x, y, start, end):
         start += self.temporal_shift
-        temporal_data = [base[:-1]] + [
-                data.data(x, y, start, end)
-                for data in self._temporal_data
-            ]
+        end += 2 * self.temporal_shift
+        base_length = base.shape[0] - 1
+        temporal_data = [base[:base_length]] + [
+            data.data(x, y, start, end)[:base_length] for data in
+            self._temporal_data
+        ]
         return np.hstack(temporal_data)
 
     def combine(self, part):
@@ -123,7 +126,7 @@ class UncompressedCombiner(Combiner):
             self, timestep="halfmonthly", resample_method='first',
             first_datestamp=FIRST_DATESTAMP, chunk_size=CHUNK_SIZE,
             selection=DEFAULT_SELECTION, base="neuralnet", data_type="train",
-            batch_size=1000, meta_size=META_SIZE, temporal_size=TEMPORAL_SIZE,
+            batch_size=BATCH_SIZE, meta_size=META_SIZE, temporal_size=TEMPORAL_SIZE,
             input_size=INPUT_SIZE, output_size=OUTPUT_SIZE, *args, **kwargs):
         super().__init__(
             timestep="halfmonthly", resample_method='first',
@@ -138,8 +141,14 @@ class UncompressedCombiner(Combiner):
         )
 
     def combine(self, part):
+        logger.info(
+            '################# Start combining %s data. #################',
+            part
+        )
         size_ = self.chunk_size * self.generator.batch_size / 100
         i = 0
+        total = 0
+        start_time = time.time()
         for j, params in enumerate(self._base_data(part)):
             x, y, z, start, end, base_metadata, base = params
             temporal = self.temporal_data(base, x, y, start, end)
@@ -147,8 +156,17 @@ class UncompressedCombiner(Combiner):
             if not self.generator.generate_batch(base[1:], meta, temporal):
                 logger.warn('Empty series at position %d', i)
                 continue
-            logger.info("Packed series #%d. At: %d" % (j, round(
-                self.generator.input_data.shape[0] / size_, 2)))
+            duration = time.time() - start_time
+            total = max(total, len(self._base_data))
+            time_left_seconds = (duration / (j + 1)) * (total - j)
+            time_left_hours = time_left_seconds // 3600
+            time_left_minutes = (time_left_seconds % 3600) // 60
+            logger.info(
+                "Packed series #%d. At: %d  |  ETA: %d:%d" % (
+                    j, round(self.generator.input_data.shape[0] / size_, 2),
+                    time_left_hours, time_left_minutes
+                )
+            )
             for input_data, output_data in self.generator.unpack_batches(
                     chunk_size=self.chunk_size):
                 i += 1

@@ -1,7 +1,7 @@
 import os
 
-
-CHUNK_SIZE = 50
+BATCH_SIZE = 100
+CHUNK_SIZE = 200
 
 CONVOLUTIONAL_MODEL_FILEPATH = os.path.join(
     'var', 'data', 'models', 'conv_model_{datetime_start}-{datetime_end}.h5')

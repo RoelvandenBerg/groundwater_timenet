@@ -55,8 +55,18 @@ class GeotopData(Data):
         rd_y = int(round(y - 358000) / 100)
         if rd_x < 0 or rd_y < 0:
             return []
-        assert self.rootgrp['x'][rd_x] == (x // 100 * 100)
-        assert self.rootgrp['y'][rd_y] == (y // 100 * 100)
+        try:
+            assert self.rootgrp['x'][rd_x] == (x // 100 * 100)
+            assert self.rootgrp['y'][rd_y] == (y // 100 * 100)
+        except AssertionError as e:
+            logger.exception(
+                "Assertion Error, x and/or y do not match. "
+                "Expected x: %d, x location %d, rd x: %d. "
+                "Expected y: %d, y location: %d, rd y: %d. Error: %s.",
+                self.rootgrp['x'][rd_x], rd_x, x, self.rootgrp['y'][rd_y],
+                rd_y, y, e
+            )
+
         if z != -9999 and not np.isnan(z):
             depth = int(round((z + 50) * 2))
             if depth < 0:

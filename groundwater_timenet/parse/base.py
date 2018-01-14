@@ -269,9 +269,11 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
         assert(
             test_percentage + validation_percentage + train_percentage == 100)
         super(BaseData, self).__init__(*args, **kwargs)
+        self._length = None
+        self._all_metadata = self._read_metadata()
+        self._meta_length = len(self._all_metadata)
         self.selection = selection
         self.seed = seed
-        self._all_metadata = self._read_metadata()
         self._parts = {
             "all": slice(None),
             "train": self._pct_to_index(0, train_percentage),
@@ -282,8 +284,10 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
         self._iterator = None
 
     def _pct_to_index(self, from_pct, to_pct):
+
         return slice(
-            int(len(self) * from_pct / 100.0), int(len(self) * to_pct / 100.0)
+            int(self._meta_length * from_pct / 100.0),
+            int(self._meta_length * to_pct / 100.0)
         )
 
     @abstractmethod
@@ -295,7 +299,9 @@ class BaseData(SelectorMixin, TemporalData, metaclass=ABCMeta):
         return []
 
     def __len__(self):
-        return len(self._all_metadata)
+        if self._length is not None:
+            return self._length
+        return self._meta_length
 
     def __iter__(self):
         return self
