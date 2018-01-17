@@ -190,9 +190,9 @@ class ConvolutionalAtrousGenerator(BaseGenerator, Sequence):
             for filepath in self.h5files:
                 datasets = h5py.File(filepath, 'r')
                 for i in range(CHUNK_SIZE):
-                    input = datasets['input_' + str(i)]
-                    output = datasets['output_' + str(i)]
-                    yield input, output
+                    inputs = datasets['input_' + str(i)]
+                    outputs = datasets['output_' + str(i)][:, :, -1:]
+                    yield inputs, outputs
 
     def __len__(self):
         return self.__length

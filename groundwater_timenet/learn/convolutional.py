@@ -2,11 +2,31 @@ import datetime
 import sys
 
 from keras.models import Sequential
-from keras.layers import Conv1D, MaxPooling1D
+from keras.layers import Conv1D, pooling
 from keras.callbacks import EarlyStopping, TensorBoard
 
 from groundwater_timenet.learn.settings import *
 from groundwater_timenet.learn.generator import ConvolutionalAtrousGenerator
+
+
+class PoolSelectRightMost(pooling._Pooling1D):
+
+    def __init__(self, dilation_rate, *args, **kwargs):
+        super(PoolSelectRightMost, self).__init__(
+            pool_size=1, padding='valid', *args, **kwargs)
+        self.dilation_rate = dilation_rate
+
+    def compute_output_shape(self, input_shape):
+        length = input_shape[1] - self.dilation_rate
+        print(input_shape, length, (input_shape[0], length, input_shape[2]))
+        return (input_shape[0], length, input_shape[2])
+
+    def _pooling_function(self, inputs, pool_size, strides,
+                          padding, data_format):
+        print(inputs, self.dilation_rate)
+        return inputs[:, self.dilation_rate:, :]
+
+    # TODO: check this: https://keunwoochoi.wordpress.com/2016/11/18/for-beginners-writing-a-custom-keras-layer/
 
 
 def create_model(
@@ -25,17 +45,24 @@ def create_model(
         **defaults
     )
     model.add(layer)
+    summed_dilation_rate = 0
     for dilation_rate in layer_dilation[1:]:
         layer = Conv1D(
-            filters=input_size,
+            filters=input_size - summed_dilation_rate,
             kernel_size=temporal_size + meta_size,
             dilation_rate=dilation_rate,
             **defaults
         )
         model.add(layer)
+        summed_dilation_rate += dilation_rate
+        pooling_layer = PoolSelectRightMost(dilation_rate=dilation_rate)
+        model.add(pooling_layer)
     # last layer outputs only the input shape
-    layer = MaxPooling1D(
-        pool_size=input_size,
+    layer = Conv1D(
+        filters=input_size - summed_dilation_rate,
+        kernel_size=temporal_size + meta_size,
+        dilation_rate=dilation_rate,
+        **defaults
     )
     model.add(layer)
     return model

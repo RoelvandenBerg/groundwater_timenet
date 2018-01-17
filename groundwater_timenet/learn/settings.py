@@ -22,11 +22,14 @@ MERGE_METADATA = 'add'
 # Convolutional layer settings.
 # half-a-month (non-telemetric systems usually have this frequency), monthly,
 # quarterly, halfyearly and yearly.
-CONVOLUTIONAL_LAYER_DILATION = (1, 2, 6, 12, 24)
+CONVOLUTIONAL_LAYER_DILATION = (1, 2, 6, 12, 3)
+OLD_CONVOLUTIONAL_LAYER_DILATION = (1, 2, 6, 12, 24)
+
 
 # we could also try sigmoid activation (we chose tanh because wavenet uses it
 # and it has a stronger gradient). And I'm curious about ReLu activation.
 CONVOLUTIONAL_LAYER_DEFAULTS = {
+    "batch_size": BATCH_SIZE,
     "padding": 'causal',
     "activation": 'tanh',
 }
